@@ -248,10 +248,50 @@ struct ObstructionDome: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .padding(14)
+        // The dome is rendered pixels and vector overlays, none of which mean
+        // anything to VoiceOver. Collapse it into one element that says what a
+        // sighted user would take from looking at it.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Sky obstruction map")
+        .accessibilityValue(accessibilitySummary)
         .task(id: renderKey) {
             await rerender()
             await runSweepBurst()
         }
+    }
+
+    /// A spoken description of the dome: what is blocked, where the dish is
+    /// pointing, and how much of the sky has been surveyed so far.
+    private var accessibilitySummary: String {
+        var parts: [String] = []
+
+        if let map {
+            let observed = map.data.count { $0 >= 0 }
+            let blocked = map.data.count { $0 > 0.5 }
+            let surveyed = Double(observed) / Double(max(1, map.data.count))
+            if observed == 0 {
+                parts.append("No sky surveyed yet.")
+            } else if blocked == 0 {
+                parts.append("Clear view, no obstructions found.")
+            } else {
+                let fraction = Double(blocked) / Double(observed)
+                parts.append("\(Format.percent(fraction, places: 1).combined) of the "
+                             + "surveyed sky is blocked.")
+            }
+            parts.append("\(Int(surveyed * 100)) percent of the dome surveyed.")
+        } else {
+            parts.append("Waiting for the dish's first map.")
+        }
+
+        if let boresight {
+            parts.append("Currently pointing \(Format.compass(boresight.azimuth)), "
+                         + "\(Int(boresight.elevation)) degrees above the horizon.")
+        }
+        if track.count > 1 {
+            parts.append("\(track.count) tracked positions over the last "
+                         + "\(AppModel.trackSeconds / 60) minutes.")
+        }
+        return parts.joined(separator: " ")
     }
 
     // MARK: - Geometry

@@ -29,6 +29,9 @@ struct AlertsScreen: View {
                 .padding(.bottom, 28)
             }
             .background(Color.ground)
+            .sensoryFeedback(.selection, trigger: model.acknowledgedAlertIDs.count) { _, _ in
+                model.settings.hapticsEnabled
+            }
             .navigationTitle("Alerts")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -163,7 +166,9 @@ struct AlertCard: View {
                             .tracking(0.8)
                             .foregroundStyle(Color.inkTertiary)
                     }
-                    Text("· active \(Format.duration(max(1, alert.age)))")
+                    // Rendered relative to now by SwiftUI, so it keeps ticking
+                    // without the model having to republish the alert.
+                    Text("· active \(Text(alert.firstSeen, style: .relative))")
                         .font(.system(size: 10))
                         .foregroundStyle(Color.inkTertiary)
                     Spacer()

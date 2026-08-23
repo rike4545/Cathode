@@ -53,6 +53,14 @@ final class AppModel {
     private(set) var obstructionAdvice: Insights.ObstructionAdvice?
     private(set) var alerts: [Alert] = []
     private(set) var acknowledgedAlertIDs: Set<String> = []
+    /// The alert set last handed to the notification service, so a poll that
+    /// changes nothing does not re-post anything.
+    private var notifiedSignature: Set<String> = []
+    /// What `alerts` currently holds, as id+severity pairs.
+    private var publishedAlertSignature: Set<String> = []
+    private var lastAlertPublish = Date.distantPast
+    /// Longest the alert wording may lag the live figures it quotes.
+    private static let alertRefreshInterval: TimeInterval = 5
     private(set) var speedTests: [SpeedTestResult] = []
     private(set) var speedTestInProgress = false
     private(set) var lastUpdate: Date?
@@ -232,17 +240,54 @@ final class AppModel {
 
         recordBoresight(status)
 
-        alerts = alertEngine.evaluate(
-            status: status, recent: liveSamples, previous: alerts)
-        // Drop acknowledgements for alerts that have since cleared, so the same
-        // problem recurring is surfaced again rather than staying silenced.
-        let live = Set(alerts.map(\.id))
-        acknowledgedAlertIDs.formIntersection(live)
+        publishAlerts(alertEngine.evaluate(
+            status: status, recent: liveSamples, previous: alerts))
 
         if let outage = outageTracker.observe(status) {
             recentOutages.insert(outage, at: 0)
             recentOutages = Array(recentOutages.prefix(200))
             Task { [store] in try? await store?.record(outage: outage) }
+        }
+    }
+
+    /// Publishes a new alert set, throttled.
+    ///
+    /// Reassigning `alerts` on every poll invalidates every view that reads it,
+    /// once a second, for the whole app — wasteful when the set of problems has
+    /// not changed. A change in *which* problems exist publishes immediately;
+    /// otherwise the refresh is time-boxed, because the detail strings quote
+    /// live figures and would go stale if gated on the signature alone.
+    private func publishAlerts(_ evaluated: [Alert]) {
+        let signature = Set(evaluated.map { "\($0.id)|\($0.severity.rawValue)" })
+        let changed = signature != publishedAlertSignature
+        let stale = Date.now.timeIntervalSince(lastAlertPublish) >= Self.alertRefreshInterval
+        guard changed || (stale && !evaluated.isEmpty) else { return }
+        publishedAlertSignature = signature
+        lastAlertPublish = .now
+        alerts = evaluated
+
+        // Drop acknowledgements for alerts that have since cleared, so the same
+        // problem recurring is surfaced again rather than staying silenced.
+        acknowledgedAlertIDs.formIntersection(Set(evaluated.map(\.id)))
+        syncNotifications()
+    }
+
+    /// Hands the current alert set to the notification service when it changes.
+    ///
+    /// Demo data never notifies — being woken at 2am by a simulated outage
+    /// would be a bug, not a feature.
+    private func syncNotifications() {
+        guard !isDemo else { return }
+        let signature = Set(alerts.map(\.id))
+        guard signature != notifiedSignature else { return }
+        notifiedSignature = signature
+
+        let enabled = settings.notificationsEnabled
+        let minimum = Alert.Severity(rawValue: settings.notifyMinimumSeverity) ?? .critical
+        let current = alerts
+        Task {
+            await NotificationService.shared.sync(
+                alerts: current, minimum: minimum, enabled: enabled)
         }
     }
 

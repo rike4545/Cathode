@@ -22,6 +22,11 @@ struct SpeedTestScreen: View {
         .background(Color.ground)
         .navigationTitle("Speed test")
         .navigationBarTitleDisplayMode(.inline)
+        // A speed test takes half a minute; people put the phone down. A result
+        // landing is exactly the kind of moment worth a tap on the wrist.
+        .sensoryFeedback(.success, trigger: latest?.id) { _, _ in
+            model.settings.hapticsEnabled
+        }
     }
 
     private var runPanel: some View {

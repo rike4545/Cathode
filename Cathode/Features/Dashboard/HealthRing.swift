@@ -44,6 +44,10 @@ struct HealthRing: View {
         }
         .frame(width: 148, height: 148)
         .animation(.smooth(duration: 0.6), value: score)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Connection health")
+        .accessibilityValue("\(score) out of 100. \(state.label)."
+            + (uptime.map { " Up \(Format.duration(Double($0)))." } ?? ""))
     }
 }
 
@@ -86,5 +90,8 @@ struct MeterBar: View {
             .animation(.smooth(duration: 0.4), value: fill)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value.combined)
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MoreScreen: View {
     @Environment(AppModel.self) private var model
+    @State private var notifications = NotificationService.shared
     @State private var showEraseConfirm = false
     @State private var hostDraft = ""
 
@@ -10,6 +11,7 @@ struct MoreScreen: View {
             ScrollView {
                 LazyVStack(spacing: Metrics.gutter) {
                     sourcePanel
+                    notificationsPanel
                     linksPanel
                     appearancePanel
                     dataPanel
@@ -23,6 +25,7 @@ struct MoreScreen: View {
             .navigationTitle("More")
             .navigationBarTitleDisplayMode(.large)
             .onAppear { hostDraft = model.settings.dishHost }
+            .task { await notifications.refreshAuthorization() }
         }
     }
 
@@ -157,6 +160,61 @@ struct MoreScreen: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Notifications
+
+    private var notificationsPanel: some View {
+        @Bindable var settings = model.settings
+        return Panel("Notifications") {
+            Toggle("Alert me about problems", isOn: $settings.notificationsEnabled)
+                .font(.system(size: 13, weight: .medium))
+                .onChange(of: settings.notificationsEnabled) { _, enabled in
+                    Task {
+                        if enabled {
+                            let granted = await NotificationService.shared.requestAuthorization()
+                            // A refused system prompt must not leave the toggle
+                            // claiming something the app cannot do.
+                            if !granted { settings.notificationsEnabled = false }
+                            BackgroundRefresh.schedule()
+                        } else {
+                            await NotificationService.shared.clearAll()
+                            BackgroundRefresh.cancel()
+                        }
+                    }
+                }
+
+            if settings.notificationsEnabled {
+                Divider().overlay(Color.hairline)
+                Picker("Notify me about", selection: $settings.notifyMinimumSeverity) {
+                    ForEach(Alert.Severity.notificationChoices, id: \.rawValue) { severity in
+                        Text(severity.notifyLabel).tag(severity.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if !notifications.isAuthorized {
+                    Label("Notifications are turned off for Cathode in iOS Settings.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.warn)
+                }
+
+                Text("Cathode reads the dish over your local network, so background "
+                     + "checks only succeed while this device is on that network. Away "
+                     + "from home you will not be alerted — there is no cloud relay, "
+                     + "which is also why there is no account.")
+                    .font(.caption2)
+                    .foregroundStyle(Color.inkTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if model.isDemo {
+                    Text("Demo mode never sends notifications.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.inkTertiary)
+                }
+            }
+        }
+    }
+
     // MARK: - Appearance
 
     private var appearancePanel: some View {
@@ -168,6 +226,8 @@ struct MoreScreen: View {
                 }
             }
             .pickerStyle(.segmented)
+            Toggle("Haptic feedback", isOn: $settings.hapticsEnabled)
+                .font(.system(size: 13))
             Toggle("Keep the screen awake", isOn: $settings.keepScreenAwake)
                 .font(.system(size: 13))
                 .onChange(of: settings.keepScreenAwake) { _, on in

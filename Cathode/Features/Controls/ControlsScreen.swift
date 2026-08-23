@@ -55,6 +55,14 @@ struct ControlsScreen: View {
         .background(Color.ground)
         .navigationTitle("Controls")
         .navigationBarTitleDisplayMode(.inline)
+        .sensoryFeedback(.impact(weight: .medium), trigger: busy) { old, new in
+            // Fire when an action starts, not when it finishes: the dish takes
+            // seconds to react and the confirmation is the useful signal.
+            model.settings.hapticsEnabled && old == nil && new != nil
+        }
+        .sensoryFeedback(.error, trigger: errorMessage) { _, new in
+            model.settings.hapticsEnabled && new != nil
+        }
         .confirmationDialog(
             pending?.title ?? "",
             isPresented: .init(get: { pending != nil }, set: { if !$0 { pending = nil } }),

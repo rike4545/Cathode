@@ -53,6 +53,16 @@ finding by severity, and — where there is something to do about it — says wh
 download finishes. It says nothing about whether a video call survives while that
 download runs. Cathode measures latency under load and grades it A+ to F.
 
+**Alerts that reach you.** Anything at or above your chosen severity arrives as
+a local notification, deduplicated by alert so a flapping link cannot produce a
+storm, and withdrawn automatically once the problem clears. A background task
+keeps checking while the app is closed.
+
+One honest limit, stated in Settings rather than buried: Cathode reads the dish
+over the local network, so a background check only succeeds while the device is
+actually on that network. Away from home you will not be alerted. There is no
+cloud relay — which is the same reason there is no account.
+
 **Controls.** Reboot, stow and unstow, reset the obstruction map, sleep schedule,
 snow melt. Every mutating action confirms first.
 
@@ -60,8 +70,15 @@ snow melt. Every mutating action confirms first.
 hardware which operations it actually implements, and a read-only request console
 that dumps any response as an inspectable field tree.
 
+**Accessible.** The sky dome is a rendered bitmap, so VoiceOver is given a
+spoken summary of it instead — how much sky is blocked, where the dish is
+pointing, how much of the dome has been surveyed. Stat tiles read as one
+statement rather than four fragments, and sparklines announce their trend.
+
 **Demo mode.** A full behavioural simulation of a terminal, so the app is
-completely explorable with no hardware present. It is the default on first run.
+completely explorable with no hardware present. It is the default on first run,
+and it never sends notifications — being woken at 2am by a simulated outage
+would be a bug, not a feature.
 
 ---
 
@@ -167,7 +184,8 @@ Cathode/
 │   ├── Store/                SQLite history with two-tier rollups
 │   └── Analytics/            alert engine, grading, obstruction advisor, trends
 ├── DesignSystem/             palette, type scale, shared components, formatters
-├── App/                      entry point, app model, settings, poll loop
+├── App/                      entry point, app model, settings, poll loop,
+│                             notifications, background refresh
 ├── Features/                 one folder per screen
 └── Config/Info.plist
 ```
@@ -232,7 +250,8 @@ What Cathode adds on top:
 - **Trend and hour-of-day analysis** — what changed against a longer baseline,
   and which hours are consistently worst.
 - **An alert engine with editable thresholds** and remedies, rather than only
-  passing through the dish's own alert bits.
+  passing through the dish's own alert bits — plus notifications and background
+  checks, so a problem finds you instead of waiting to be noticed.
 - **A capability probe and request console**, so an undocumented API is
   inspectable rather than opaque.
 - **Zero dependencies** — no protobuf runtime, no gRPC library, no chart library

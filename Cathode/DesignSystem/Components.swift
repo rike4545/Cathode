@@ -112,6 +112,17 @@ struct StatTile: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Read as one statement rather than as label, number, unit and caption
+        // announced as four separate elements.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var accessibilityValue: String {
+        var spoken = value.value == "—" ? "no reading" : value.combined
+        if let caption { spoken += ". \(caption)" }
+        return spoken
     }
 }
 
@@ -152,6 +163,21 @@ struct Sparkline: View {
                            style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
         .drawingGroup()
+        // A sparkline carries trend, not values; that is what to announce.
+        .accessibilityElement()
+        .accessibilityLabel("Trend")
+        .accessibilityValue(trendDescription)
+    }
+
+    private var trendDescription: String {
+        guard let first = values.first, let last = values.last, values.count > 1 else {
+            return "no data"
+        }
+        guard first != 0 else { return last > 0 ? "rising" : "flat" }
+        let change = (last - first) / abs(first)
+        if abs(change) < 0.05 { return "steady" }
+        return change > 0 ? "rising \(Int(abs(change) * 100)) percent"
+                          : "falling \(Int(abs(change) * 100)) percent"
     }
 }
 
@@ -181,6 +207,9 @@ struct StatusPill: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Status")
+        .accessibilityValue(text)
         .background(Color.tone(tone).opacity(0.13), in: .capsule)
         .overlay { Capsule().strokeBorder(Color.tone(tone).opacity(0.28), lineWidth: 1) }
         .onAppear {
@@ -210,6 +239,7 @@ struct MetricRow: View {
                 .foregroundStyle(tone.map { Color.tone($0) } ?? Color.ink)
                 .multilineTextAlignment(.trailing)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
