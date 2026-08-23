@@ -48,6 +48,9 @@ final class Settings {
 
     var source: Source { didSet { store(source.rawValue, .source) } }
     var dishHost: String { didSet { store(dishHost, .dishHost) } }
+    /// False until discovery or the user has confirmed an address. Controls
+    /// whether Cathode may re-run discovery and replace the host by itself.
+    var dishHostIsPinned: Bool { didSet { store(dishHostIsPinned, .hostPinned) } }
     var pollIntervalSeconds: Double { didSet { store(pollIntervalSeconds, .pollInterval) } }
     var appearance: Appearance { didSet { store(appearance.rawValue, .appearance) } }
     var notificationsEnabled: Bool { didSet { store(notificationsEnabled, .notifications) } }
@@ -63,7 +66,7 @@ final class Settings {
 
     private enum Key: String {
         case source, dishHost, pollInterval, appearance, notifications, notifySeverity
-        case keepAwake, haptics, allowance, billingDay, thresholds
+        case keepAwake, haptics, allowance, billingDay, thresholds, hostPinned
     }
 
     private let defaults: UserDefaults
@@ -76,6 +79,7 @@ final class Settings {
         self.source = defaults.string(forKey: Key.source.rawValue)
             .flatMap(Source.init) ?? .demo
         self.dishHost = defaults.string(forKey: Key.dishHost.rawValue) ?? DishEndpoint.dishHost
+        self.dishHostIsPinned = defaults.bool(forKey: Key.hostPinned.rawValue)
         let interval = defaults.double(forKey: Key.pollInterval.rawValue)
         self.pollIntervalSeconds = interval > 0 ? interval : 1
         self.appearance = defaults.string(forKey: Key.appearance.rawValue)

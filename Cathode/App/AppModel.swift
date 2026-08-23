@@ -12,6 +12,23 @@ import Observation
 @Observable
 final class AppModel {
 
+    enum DiscoveryState: Equatable {
+        case idle
+        case searching
+        /// Nothing on this network answered the Device API.
+        case notFound
+        case found(host: String, name: String)
+        /// Explicit full-subnet sweep, with progress 0–1.
+        case sweeping(progress: Double)
+
+        var isBusy: Bool {
+            switch self {
+            case .searching, .sweeping: true
+            default: false
+            }
+        }
+    }
+
     enum ConnectionState: Equatable {
         case idle
         case connecting
@@ -67,6 +84,8 @@ final class AppModel {
     private(set) var speedTestInProgress = false
     private(set) var lastUpdate: Date?
     private(set) var storeStatistics: StoreStatistics?
+    private(set) var discovery: DiscoveryState = .idle
+    private(set) var discovered: [DishDiscovery.Found] = []
     private(set) var recentOutages: [OutageRecord] = []
 
     /// A rolling in-memory window of the most recent seconds, for the live
@@ -140,6 +159,12 @@ final class AppModel {
         connection = .connecting
         alertEngine.thresholds = settings.thresholds
 
+        // Find the hardware before trying to talk to it, unless the user has
+        // pinned an address by hand.
+        if settings.source == .dish, !settings.dishHostIsPinned {
+            await runDiscovery()
+        }
+
         let transport: DishTransport = switch settings.source {
         case .demo: SimulatorTransport()
         case .dish: GrpcWebTransport(host: settings.dishHost)
@@ -159,6 +184,47 @@ final class AppModel {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             await self?.pollLoop(client: client)
+        }
+    }
+
+    // MARK: - Discovery
+
+    /// Probes the short candidate list and adopts whatever dish answers.
+    @discardableResult
+    func runDiscovery() async -> Bool {
+        discovery = .searching
+        let results = await DishDiscovery.discover()
+        discovered = results
+
+        guard let best = results.first(where: { $0.kind == .dish }) ?? results.first else {
+            discovery = .notFound
+            return false
+        }
+        // Only the dish's address is worth adopting; the router speaks the same
+        // API but reports none of the telemetry this app is built around.
+        if best.kind == .dish {
+            settings.dishHost = best.host
+        }
+        discovery = .found(host: best.host, name: best.describedName)
+        return true
+    }
+
+    /// Full-subnet sweep. User-initiated only.
+    func sweepNetwork() async {
+        discovery = .sweeping(progress: 0)
+        let results = await DishDiscovery.sweep { fraction in
+            Task { @MainActor [weak self] in
+                self?.discovery = .sweeping(progress: fraction)
+            }
+        }
+        discovered = results
+        if let dish = results.first(where: { $0.kind == .dish }) {
+            settings.dishHost = dish.host
+            discovery = .found(host: dish.host, name: dish.describedName)
+        } else if let any = results.first {
+            discovery = .found(host: any.host, name: any.describedName)
+        } else {
+            discovery = .notFound
         }
     }
 

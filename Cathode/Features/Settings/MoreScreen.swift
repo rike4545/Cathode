@@ -5,6 +5,7 @@ struct MoreScreen: View {
     @State private var notifications = NotificationService.shared
     @State private var showEraseConfirm = false
     @State private var hostDraft = ""
+    @State private var showManualHost = false
 
     var body: some View {
         NavigationStack {
@@ -63,28 +64,7 @@ struct MoreScreen: View {
 
                 if settings.source == .dish {
                     Divider().overlay(Color.hairline)
-                    HStack {
-                        Text("Dish address")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color.inkSecondary)
-                        Spacer()
-                        TextField(DishEndpoint.dishHost, text: $hostDraft)
-                            .font(.technical)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.numbersAndPunctuation)
-                            .frame(width: 140)
-                            .onSubmit {
-                                settings.dishHost = hostDraft
-                                Task { await model.reconnect() }
-                            }
-                    }
-                    Text("The dish serves gRPC-web on port \(DishEndpoint.dishPort). "
-                         + "Change this only if your dish is behind a different address.")
-                        .font(.caption2)
-                        .foregroundStyle(Color.inkTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    DiscoveryView(hostDraft: $hostDraft, showManual: $showManualHost)
                 }
 
                 Divider().overlay(Color.hairline)

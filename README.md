@@ -98,6 +98,15 @@ spoken summary of it instead — how much sky is blocked, where the dish is
 pointing, how much of the dome has been surveyed. Stat tiles read as one
 statement rather than four fragments, and sparklines announce their trend.
 
+**Finds the dish on its own.** No address to look up or type. The dish answers
+on a fixed management address regardless of what subnet your router hands out —
+even in bypass mode behind third-party equipment — so Cathode probes that, the
+default router address, and this device's own gateway in parallel, and adopts
+whatever actually speaks the Device API. When several things answer, it says
+which is which and lets you pick. A full-subnet scan is there for unusual
+setups, but it is never run on its own: 254 probes is slow, and doing it
+unasked would make a modest lookup look like something else entirely.
+
 **Demo mode.** A full behavioural simulation of a terminal, so the app is
 completely explorable with no hardware present. It is the default on first run,
 and it never sends notifications — being woken at 2am by a simulated outage
@@ -127,7 +136,8 @@ xcodebuild -project Cathode.xcodeproj -scheme Cathode -destination 'platform=iOS
 ```
 
 To point it at real hardware, join the Starlink network and switch
-**More → Connection → My Starlink**.
+**More → Connection → My Starlink**. Cathode finds the dish itself — there is
+no address to type.
 
 ## Tests
 
@@ -201,6 +211,7 @@ Diagnostics dumps the raw field tree — that output is the useful thing to repo
 Cathode/
 ├── Core/                     no UIKit, no SwiftUI — fully testable
 │   ├── Protobuf/             wire-format reader and writer
+│   ├── Discovery/            finds Starlink hardware on the local network
 │   ├── Grpc/                 framing, transport protocol, gRPC-web over URLSession
 │   ├── Starlink/             types, field map, decoders, client actor
 │   ├── Sim/                  behavioural dish model + a transport that encodes it
