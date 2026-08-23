@@ -1,182 +1,193 @@
 # Cathode
 
-A local-first instrument panel for your Starlink dish, for iPhone and iPad.
+**A local-first instrument panel for your Starlink dish. iPhone and iPad.**
 
-Cathode talks straight to the dish on your own network over its local gRPC API.
-There is no account, no cloud service, and no telemetry — the app and the
-hardware, nothing in between.
+Cathode reads the dish directly over your own network, using the local gRPC API
+the hardware already exposes. No account, no cloud service, no telemetry, no
+third-party dependencies — just the app and the hardware.
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" width="270" alt="Dashboard showing health score, live throughput and stat tiles">
-  <img src="docs/screenshots/sky.png" width="270" alt="Sky obstruction dome with placement advisor">
-  <img src="docs/screenshots/history.png" width="270" alt="History screen with usage, availability and throughput charts">
+  <img src="docs/screenshots/dashboard.png" width="205" alt="Dashboard: health score, live throughput ribbon, latency and loss tiles">
+  <img src="docs/screenshots/sky.png" width="205" alt="Sky: obstruction dome with satellite track and placement advisor">
+  <img src="docs/screenshots/history.png" width="205" alt="History: lost time attributed by cause, signal-to-noise chart">
+  <img src="docs/screenshots/network.png" width="205" alt="Network: per-device usage ranked over time">
 </p>
 
+> **Status.** Complete and working, verified end to end in the iOS Simulator
+> against a built-in dish simulator that speaks the real wire protocol. It has
+> **not yet been run against physical hardware** — see [Limits](#limits) before
+> relying on it.
+
 ---
 
-## What it does
+## Why it exists
 
-**Live telemetry.** Download and upload, latency to the point of presence,
-packet loss, power draw, signal, obstruction, GPS and alignment — polled once a
-second and drawn as a mirrored throughput ribbon with outage bands, so a gap
+Starlink's own app tells you whether the dish is online. It will not tell you
+whether last Tuesday was worse than the Tuesday before, which direction the tree
+is blocking, or whether the thing ruining your calls is an obstruction or your
+cell running out of capacity.
+
+The dish already knows all of that. It publishes far more than any interface
+shows, throws most of it away after twelve hours, and forgets everything on
+reboot. Cathode reads it, keeps it, and tries to answer the question behind the
+question — not *what is the number*, but *what should I do about it*.
+
+## What it shows you
+
+### Is it working right now?
+
+A health score, a live throughput ribbon with download above the axis and upload
+mirrored below, and the numbers people actually check: latency, packet loss,
+power draw, obstruction. Polled once a second. Outages draw as bands, so a gap
 reads as *no data* rather than as zero.
 
-**Sky obstruction map.** The dish's 123×123 SNR grid, rendered as a polar sky
-dome with elevation rings, a compass, and a live scan sweep. The boresight
-marker eases along each satellite pass and leaves a fading track behind it, so
-you can see the arc of sky actually in use and count the handoffs — a terminal
-switches satellites every fifteen seconds, and a single jumping dot shows none
-of that.
+### Why does it keep dropping?
 
-**Placement advisor.** The dish reports *how much* sky is blocked but never
-*where*. Cathode reduces the SNR grid into angular wedges, finds the worst ones,
-and turns that into an instruction you can act on while standing outside:
-which direction the blockage is, how high it reaches, which way to move, and
+Every lost second is **attributed to a cause**. An obstruction and a second
+where the network had no slot to give you look identical on a throughput chart
+and have nothing in common — one is fixed with a chainsaw, the other is Starlink
+capacity in your cell. Cathode separates them, and the parts reconcile exactly
+against the total.
+
+**Signal-to-noise history** tells weather from trees: a broad sag with no
+obstruction is rain or snow; a blockage cuts sharply, always in the same patch of
+sky.
+
+### Where exactly is it blocked?
+
+The dish's 123×123 SNR grid, drawn as a polar sky dome. The boresight marker
+eases along each satellite pass and leaves a fading track, so you can see the arc
+of sky in use and count the handoffs — a terminal switches satellites every
+fifteen seconds, and a single jumping dot shows none of that.
+
+The **placement advisor** goes past what the hardware will tell you. Starlink
+reports *how much* sky is blocked, never *where*. Cathode reduces the grid into
+angular wedges and turns the worst one into an instruction you can follow while
+standing outside: which direction, how high it reaches, which way to move, and
 roughly how much of the problem that one direction accounts for.
 
-**History that outlives the dish.** The dish keeps 12 hours in a ring buffer and
-loses it on reboot. Cathode records what it sees into SQLite at two resolutions —
-one row per second for 48 hours, one row per minute forever — so it can answer
-questions the hardware cannot: what did last month look like, when do the outages
-cluster, is the obstruction getting worse since the tree was trimmed.
+### Is it getting worse?
 
-**Availability and usage.** Uptime as a percentage with downtime accounted for,
-data moved in each direction, energy consumed with a monthly projection, and an
-optional allowance tracker on your billing cycle.
+History at two resolutions — every second for 48 hours, every minute forever —
+so ranges from one hour to thirty days all query instantly. Throughput, latency,
+reliability, power, and a **95th-percentile latency** line, which is the figure
+that predicts whether calls hold up and the one an average hides completely.
 
-**Lost time, attributed.** Every dropped second is assigned a cause, because
-"obstructed" and "the network had no slot to give you" look identical on a
-throughput chart and have nothing in common. One is fixed with a chainsaw; the
-other is Starlink capacity in your cell. Cathode is the only monitor that splits
-them, and the totals reconcile exactly — obstructed plus no-capacity plus other
-equals the seconds actually lost.
+Plus availability with downtime accounted for, data moved, energy consumed with a
+monthly projection, an hour-of-day profile showing where congestion lands, and a
+trend pass that says what changed against a longer baseline.
 
-**95th-percentile latency.** The average hides exactly the spikes that break a
-video call. p95 is what latency reaches in the worst second out of twenty, and
-it is the number that predicts whether a connection *feels* good.
+### Who is using all the data?
 
-**Signal-to-noise history.** The dish has always sent a per-second SNR series
-and most tools discard it. A broad SNR sag with no obstruction is rain or snow;
-an obstruction cuts sharply and always in the same part of the sky. Together
-they answer "is it the weather or is it my trees". Newer firmware leaves the
-series at zero, in which case the chart is hidden rather than drawn empty.
+The router only reports a running lifetime total per device, which answers the
+wrong question. Cathode samples those counters and stores the differences, then
+ranks devices by what they actually used today, this week, or this month.
 
-**Usage by device, over time.** The router reports only a running lifetime total
-per client, which answers the wrong question. Cathode samples those counters and
-stores the differences, so it can rank who has actually been using the
-connection today, this week, or this month — and it re-baselines rather than
-recording nonsense when a router reboot resets the counters.
+### Should I do something about it?
 
-**Alerts that mean something.** The dish raises hardware alert bits, but most of
-what actually degrades a connection never sets one. Cathode watches latency,
-packet loss, obstruction, signal, throughput floor and stability, grades each
-finding by severity, and — where there is something to do about it — says what.
+An alert engine watching latency, loss, obstruction, signal, throughput floor and
+stability — with editable thresholds, and a remedy attached wherever there is
+one. Anything at or above your chosen severity arrives as a notification,
+deduplicated per alert so a flapping link cannot produce a storm, and withdrawn
+once the problem clears.
 
-**Speed test with a bufferbloat grade.** A speed number tells you how fast a
-download finishes. It says nothing about whether a video call survives while that
-download runs. Cathode measures latency under load and grades it A+ to F.
+### The rest
 
-**Alerts that reach you.** Anything at or above your chosen severity arrives as
-a local notification, deduplicated by alert so a flapping link cannot produce a
-storm, and withdrawn automatically once the problem clears. A background task
-keeps checking while the app is closed.
+- **Speed test** with a bufferbloat grade. A speed number says how fast a
+  download finishes; it says nothing about whether a call survives *while* that
+  download runs. Cathode measures latency under load and grades it A+ to F.
+- **Controls** — reboot, stow and unstow, reset the obstruction map, sleep
+  schedule, snow melt. Every mutating action confirms first.
+- **Diagnostics** — connection detail, a capability probe that asks the hardware
+  which operations it implements, and a read-only console that dumps any
+  response as an inspectable field tree.
+- **Accessible** — the dome is a rendered bitmap, so VoiceOver gets a spoken
+  summary instead: how much sky is blocked, where the dish is pointing, how much
+  of the dome has been surveyed. Tiles read as one statement, not four
+  fragments.
+- **Demo mode** — a full behavioural simulation, so the app is explorable with
+  no hardware at all. It is the default on first run and never sends
+  notifications.
 
-One honest limit, stated in Settings rather than buried: Cathode reads the dish
-over the local network, so a background check only succeeds while the device is
-actually on that network. Away from home you will not be alerted. There is no
-cloud relay — which is the same reason there is no account.
+## What makes it different
 
-**Controls.** Reboot, stow and unstow, reset the obstruction map, sleep schedule,
-snow melt. Every mutating action confirms first.
+**It finds the dish itself.** There is no address to look up or type. The dish
+answers on a fixed management address regardless of the subnet your router hands
+out — even in bypass mode behind third-party equipment — so Cathode probes that,
+the default router address, and this device's own gateway in parallel, and adopts
+whatever actually speaks the Device API. Identification is by `getDeviceInfo`, so
+a NAS that happens to have the port open is not mistaken for a dish.
 
-**Diagnostics.** Connection and firmware detail, a capability probe that asks the
-hardware which operations it actually implements, and a read-only request console
-that dumps any response as an inspectable field tree.
+**No dependencies.** The dish speaks gRPC-web over plain HTTP/1.1, which
+`URLSession` can do unaided — so the protobuf codec and gRPC framing are written
+from scratch, about 780 lines. No gRPC library, no protobuf toolchain, no chart
+library beyond Apple's own. Every import is a system framework.
 
-**Accessible.** The sky dome is a rendered bitmap, so VoiceOver is given a
-spoken summary of it instead — how much sky is blocked, where the dish is
-pointing, how much of the dome has been surveyed. Stat tiles read as one
-statement rather than four fragments, and sparklines announce their trend.
+**The simulator emits real protobuf.** It would have been easier to return typed
+values, but then demo mode would exercise none of the framing, field numbering or
+decode logic. Instead it produces the same bytes hardware would. Every wire-layer
+bug found during development surfaced this way rather than waiting for someone to
+plug in a dish.
 
-**Finds the dish on its own.** No address to look up or type. The dish answers
-on a fixed management address regardless of what subnet your router hands out —
-even in bypass mode behind third-party equipment — so Cathode probes that, the
-default router address, and this device's own gateway in parallel, and adopts
-whatever actually speaks the Device API. When several things answer, it says
-which is which and lets you pick. A full-subnet scan is there for unusual
-setups, but it is never run on its own: 254 probes is slow, and doing it
-unasked would make a modest lookup look like something else entirely.
+**It says what it does not know.** Values stay optional all the way to the view,
+so a dish that does not report power shows an em dash, never `0 W`.
 
-**Demo mode.** A full behavioural simulation of a terminal, so the app is
-completely explorable with no hardware present. It is the default on first run,
-and it never sends notifications — being woken at 2am by a simulated outage
-would be a bug, not a feature.
+## Getting it running
 
----
-
-## Requirements
-
-- Xcode 16 or later (built and tested against Xcode 26.6 / Swift 6.3)
-- iOS 18.0 or later
-- For live data: an iPhone or iPad on the same network as the dish
-
-## Build and run
+Requires **Xcode 16+** (built against Xcode 26.6 / Swift 6.3) and **iOS 18+**.
 
 ```bash
 open Cathode.xcodeproj
 ```
 
-Select the **Cathode** scheme and run. The app opens in demo mode, so it works
+Pick the **Cathode** scheme and run. It opens in demo mode, so it works
 immediately in the Simulator with nothing else set up.
 
-To build from the command line:
+From the command line:
 
 ```bash
 xcodebuild -project Cathode.xcodeproj -scheme Cathode -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
-To point it at real hardware, join the Starlink network and switch
-**More → Connection → My Starlink**. Cathode finds the dish itself — there is
-no address to type.
+For real hardware: join the Starlink network and switch **More → Connection → My
+Starlink**. Cathode finds the dish on its own.
 
 ## Tests
-
-The wire format and analysis layers have a dependency-free harness that compiles
-the platform-independent core and runs it:
 
 ```bash
 ./Tests/run.sh
 ```
 
-These cover the places where a mistake is invisible in the UI — a mis-decoded
-array still draws a chart, it just draws the wrong one. Two real bugs were caught
-this way and both are pinned by tests: packed-float element width, and rollup
-double-counting when the dish's ring buffer is deliberately re-read.
+A dependency-free harness that compiles the platform-independent core and runs
+60 checks over it. These cover the places where a mistake is invisible in the UI
+— a mis-decoded array still draws a chart, it just draws the wrong one.
 
----
+Three real bugs were caught this way and each is pinned by a test:
+
+| Bug | Why it was invisible |
+| --- | --- |
+| Packed-float element width was being sniffed from the data | 43 200 float32s is also a valid byte length for float64s, and watt values reinterpret into plausible-looking doubles around 1e12 |
+| Rollups double-counted bytes | The poll loop deliberately re-reads the dish's ring buffer; ignored duplicate inserts still entered the rollup buffer |
+| Obstructed seconds were also marked unscheduled | Made every obstruction count as congestion — the exact conflation the lost-time chart exists to remove |
 
 ## How it talks to the dish
 
-The dish exposes a gRPC service, `SpaceX.API.Device.Device`, on the local
-network. Every operation travels over a single method, `Handle`, as one arm of a
-protobuf `oneof` — so the entire API surface reduces to `call(op:)`.
+The dish exposes a gRPC service, `SpaceX.API.Device.Device`. Every operation
+travels over a single method, `Handle`, as one arm of a protobuf `oneof` — so the
+whole API surface reduces to `call(op:)`.
 
-| Endpoint | Port | Protocol | Used by Cathode |
+| Endpoint | Port | Protocol | Used |
 | --- | --- | --- | --- |
 | `192.168.100.1` | 9200 | native gRPC over HTTP/2 | no — needs trailers `URLSession` does not expose |
 | `192.168.100.1` | 9201 | gRPC-web over HTTP/1.1 | **yes** |
 | `192.168.1.1` | 9000 | router, same service | yes, when present |
 
-Cathode speaks gRPC-web over `URLSession`, which means **no gRPC library and no
-protobuf toolchain** — the wire codec is about 450 lines of Swift in
-`Core/Protobuf` and `Core/Grpc`. The whole app has zero third-party dependencies.
+Two iOS specifics live in `Config/Info.plist`: the dish is HTTP-only, so there is
+a scoped App Transport Security exception for its addresses; and reaching a LAN
+address triggers the local-network privacy prompt, which the app explains and
+reports clearly if declined.
 
-Two iOS specifics are handled in `Config/Info.plist`: the dish is HTTP-only, so
-there is a scoped App Transport Security exception for its two addresses; and
-reaching a LAN address triggers the local-network privacy prompt, which the app
-explains and reports clearly if declined.
-
-### On the undocumented API
+### On working against an undocumented API
 
 Starlink's Device API is not publicly documented. The field numbers in
 `Core/Starlink/DishSchema.swift` are the community-known layout used across the
@@ -186,110 +197,104 @@ firmware revision.
 
 So Cathode is built to degrade honestly rather than to be confidently wrong:
 
-- Responses are decoded **structurally**, by field number and wire type, instead
-  of against a compiled schema. A firmware update that adds fields does not break
+- Responses are decoded **structurally**, by field number and wire type, not
+  against a compiled schema. New fields in a firmware update do not break
   parsing, and a field that cannot be found reads as *unknown* rather than as a
   plausible wrong number.
-- Every optional value stays optional all the way to the view. A dish that does
-  not report power shows `—`, never `0 W`.
-- **Diagnostics → Supported operations** probes the hardware and reports which
-  operations it actually answers, so an operation whose number has moved shows up
-  as unsupported instead of as bad data.
-- Packed array element width comes from the schema, never from sniffing the
-  bytes. (This was a real bug: 43 200 float32s is also a valid byte length for
-  float64s, and adjacent watt values reinterpret into plausible-looking doubles
-  around 1e12.)
+- Packed array element width comes from the schema, never from inspecting the
+  bytes.
+- **Diagnostics → Supported operations** probes the hardware and reports what it
+  actually answers, so an operation whose number has moved shows up as
+  unsupported instead of as bad data.
 
-If you have hardware and something decodes wrong, the request console in
-Diagnostics dumps the raw field tree — that output is the useful thing to report.
-
----
+If something decodes wrong on your hardware, the request console in Diagnostics
+dumps the raw field tree. That output is the useful thing to report.
 
 ## Architecture
 
 ```
 Cathode/
-├── Core/                     no UIKit, no SwiftUI — fully testable
-│   ├── Protobuf/             wire-format reader and writer
-│   ├── Discovery/            finds Starlink hardware on the local network
-│   ├── Grpc/                 framing, transport protocol, gRPC-web over URLSession
-│   ├── Starlink/             types, field map, decoders, client actor
-│   ├── Sim/                  behavioural dish model + a transport that encodes it
-│   ├── Store/                SQLite history with two-tier rollups
-│   └── Analytics/            alert engine, grading, obstruction advisor, trends
-├── DesignSystem/             palette, type scale, shared components, formatters
-├── App/                      entry point, app model, settings, poll loop,
-│                             notifications, background refresh
-├── Features/                 one folder per screen
+├── Core/                  no UIKit, no SwiftUI — fully testable
+│   ├── Protobuf/          wire-format reader and writer
+│   ├── Grpc/              framing, transport protocol, gRPC-web over URLSession
+│   ├── Discovery/         finds Starlink hardware on the local network
+│   ├── Starlink/          types, field map, decoders, client actor
+│   ├── Sim/               behavioural dish model + a transport that encodes it
+│   ├── Store/             SQLite history with two-tier rollups
+│   └── Analytics/         alert engine, grading, obstruction advisor, trends
+├── DesignSystem/          palette, type scale, shared components, formatters
+├── App/                   entry point, model, settings, poll loop,
+│                          notifications, background refresh
+├── Features/              one folder per screen
 └── Config/Info.plist
 ```
+
+39 Swift files, roughly 9 900 lines, of which 3 900 are the platform-independent
+core.
 
 `DishTransport` is the seam. Both the real gRPC-web transport and the simulator
 conform to it, so nothing above that layer knows which one it is talking to.
 
-**The simulator encodes real protobuf.** It would have been easier to return
-typed values directly, but then demo mode would exercise none of the framing,
-field numbering or decode logic. Instead it produces the same bytes hardware
-would, so a bug in the wire layer surfaces in the Simulator instead of hiding
-until someone plugs in a dish. Both bugs found during development were caught
-this way.
+**One poll loop drives everything.** Status reads every second; the obstruction
+map, router client list and location run on their own deadlines, so a
+15 129-cell SNR grid never blocks the live numbers. Those deadlines are
+time-based rather than counted in poll ticks, so a reconnect or a cancelled loop
+cannot desynchronise them.
 
-The model itself is behavioural, not a random walk: satellite handoffs land on
-15-second boundaries with a latency step, obstructions are fixed objects in the
-sky that only bite when the tracked satellite passes behind one, household demand
-follows a diurnal curve with bursty streaming, rain fade degrades SNR and
-throughput together, and power tracks load plus a heater draw when it is cold.
-
-**One poll loop drives everything.** Status is read every second; the obstruction
-map, router client list and location are on their own slower cadences so a
-15 129-cell SNR grid never blocks the live numbers.
-
-35 Swift files, ~8 000 lines, of which ~3 400 are the platform-independent core.
-
----
+**The dish simulator is a model, not a random walk.** Satellite handoffs land on
+15-second boundaries and the boresight tracks each pass across the sky.
+Obstructions are fixed objects that only bite when the tracked satellite passes
+behind one. Household demand follows a diurnal curve with bursty streaming. Rain
+fade degrades SNR and throughput together. Power tracks load, plus a heater draw
+when it is cold.
 
 ## Privacy
 
-Cathode reads from your dish and writes to your device. That is the whole data
+Cathode reads from your dish and writes to your device. That is the entire data
 flow.
 
 - No account, no sign-in, no server.
 - No analytics, crash reporting, or telemetry of any kind.
-- History lives in the app's own container and is deleted with the app. You can
+- History lives in the app's container and is deleted with the app. You can
   erase it at any time from **More → Recorded history**.
-- The only network destinations the app ever contacts are the two local addresses
-  in the table above.
+- The only network destinations the app ever contacts are the local addresses in
+  the table above.
 
----
+## Limits
+
+Stated plainly, because a monitoring tool that overstates itself is worse than
+none.
+
+- **Not yet tested against physical hardware.** Demo mode exercises the full
+  wire path, but the live connection to a real dish has never been run. The
+  fixed-address assumption and the field numbers are well established; they are
+  still the kind of thing only hardware confirms.
+- **Background alerts only work at home.** Cathode reads the dish over the local
+  network, so a background check only succeeds while the device is on that
+  network. Away from home you will not be alerted. There is no cloud relay —
+  which is the same reason there is no account.
+- **SNR is absent on newer firmware.** Recent builds leave the series at zero.
+  The chart hides itself rather than drawing an empty axis.
+- **Data usage is what Cathode saw.** Totals reflect the periods the app was
+  running to observe them, not your true billed usage.
+- **iPad runs the phone layout.** It builds and works, but has no split-view
+  design yet.
+- **The 95th-percentile figure is per-minute.** A true percentile across a month
+  would need the raw samples, which are discarded after 48 hours. What is shown
+  is the worst per-minute p95 in each bucket — the number that tracks how bad it
+  actually gets.
 
 ## Relationship to Dishylink
 
-Cathode began as an iOS answer to [Dishylink](https://github.com/DaveyHert/Dishylink),
-an open-source Starlink monitor for desktop and browsers, and covers the same
-ground: live stat tiles, throughput and latency and power charts, the sky
-obstruction dome, alignment, device usage, event logs, speed tests and alerts,
-and the dish and router controls.
+Cathode began as an iOS answer to
+[Dishylink](https://github.com/DaveyHert/Dishylink), an open-source Starlink
+monitor for desktop and browsers, and covers the same ground: live stat tiles,
+throughput and latency and power charts, the obstruction dome, alignment, device
+usage, event logs, speed tests, alerts, and the dish and router controls.
 
-What Cathode adds on top:
-
-- **Native iOS** rather than Electron and a browser extension.
-- **History beyond the session** — SQLite with minute rollups kept indefinitely,
-  instead of charts limited to 15 m / 1 h / 6 h.
-- **Availability and energy reporting** — uptime percentage, downtime accounting,
-  kWh with a monthly projection, allowance tracking against a billing cycle.
-- **The placement advisor** — not just how much sky is blocked, but which
-  direction, how high, and what to do.
-- **Bufferbloat grading** on speed tests, and a rolling connection grade from
-  history.
-- **Trend and hour-of-day analysis** — what changed against a longer baseline,
-  and which hours are consistently worst.
-- **An alert engine with editable thresholds** and remedies, rather than only
-  passing through the dish's own alert bits — plus notifications and background
-  checks, so a problem finds you instead of waiting to be noticed.
-- **A capability probe and request console**, so an undocumented API is
-  inspectable rather than opaque.
-- **Zero dependencies** — no protobuf runtime, no gRPC library, no chart library
-  beyond Apple's own.
+Native iOS rather than Electron; history that survives past the session;
+availability and energy reporting; lost time attributed by cause; the placement
+advisor; bufferbloat grading; automatic discovery; and no dependencies at all.
 
 ## License
 
