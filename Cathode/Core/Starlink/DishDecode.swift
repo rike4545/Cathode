@@ -135,6 +135,9 @@ enum DishDecode {
         let latency = m.floatArray(F.History.popPingLatencyMs)
         let drop = m.floatArray(F.History.popPingDropRate)
         let power = m.floatArray(F.History.powerIn)
+        // The dish has always sent this series; Cathode was discarding it.
+        // Newer firmware leaves it at zero, which `cleanSnr` treats as absent.
+        let snr = m.floatArray(F.History.snr)
         let scheduled = m.boolArray(F.History.scheduled)
         let obstructed = m.boolArray(F.History.obstructed)
 
@@ -161,6 +164,7 @@ enum DishDecode {
                 latencyMs: positive(latency[safe: idx]),
                 dropRate: dropRate,
                 powerW: power.isEmpty ? nil : nonNegative(power[safe: idx]),
+                snr: snr.isEmpty ? nil : cleanSnr(snr[safe: idx]),
                 obstructed: obstructed[safe: idx] ?? false,
                 noSchedule: !(scheduled[safe: idx] ?? true)))
         }
@@ -242,6 +246,14 @@ enum DishDecode {
         guard let v = finite(v), v > 0 else { return nil }
         return v
     }
+    /// SNR is reported in dB over a small positive range. Firmware that no
+    /// longer measures it sends a flat zero, which must read as "not reported"
+    /// rather than as a signal floor.
+    private static func cleanSnr(_ v: Double?) -> Double? {
+        guard let v = finite(v), v > 0 else { return nil }
+        return v
+    }
+
     private static func clamp01(_ v: Double?) -> Double? {
         guard let v = finite(v) else { return nil }
         return min(1, max(0, v))

@@ -59,6 +59,8 @@ final class AppModel {
     /// What `alerts` currently holds, as id+severity pairs.
     private var publishedAlertSignature: Set<String> = []
     private var lastAlertPublish = Date.distantPast
+    /// Last cumulative byte counters seen per device, for differencing.
+    private var lastClientCounters: [String: (down: Double, up: Double)] = [:]
     /// Longest the alert wording may lag the live figures it quotes.
     private static let alertRefreshInterval: TimeInterval = 5
     private(set) var speedTests: [SpeedTestResult] = []
@@ -129,6 +131,7 @@ final class AppModel {
         obstructionMap = nil
         obstructionAdvice = nil
         boresightTrack.removeAll()
+        lastClientCounters.removeAll()
         wifi = nil
         await connect()
     }
@@ -234,6 +237,9 @@ final class AppModel {
             latencyMs: status.popPingLatencyMs,
             dropRate: status.popPingDropRate ?? 0,
             powerW: status.powerW,
+            // Per-second SNR only arrives with the history series, not with
+            // status; leaving it nil keeps the two sources from disagreeing.
+            snr: nil,
             obstructed: status.obstruction.currentlyObstructed ?? false,
             noSchedule: false)
         appendLive([sample])
@@ -369,7 +375,12 @@ final class AppModel {
     private func refreshHistoryTail(client: DishClient) async -> Bool {
         guard let window = try? await client.history(limit: 240),
               !window.samples.isEmpty else { return false }
-        Task { [store] in try? await store?.ingest(window.samples) }
+        Task { [store] in
+            try? await store?.ingest(window.samples)
+            // Seconds the live poll already wrote are missing SNR; only the
+            // history series carries it.
+            try? await store?.enrich(window.samples)
+        }
         return true
     }
 
@@ -388,7 +399,35 @@ final class AppModel {
         guard await client.supports(.wifiGetStatus) else { return true }
         guard let status = try? await client.wifiClients() else { return false }
         wifi = status
+        recordClientUsage(status.clients)
         return true
+    }
+
+    /// Turns the router's cumulative per-device counters into usage over time.
+    ///
+    /// The router only ever reports a running total, which answers "how much
+    /// has this device ever used" and not "who has been hammering the
+    /// connection this week" — the question people actually ask. Differencing
+    /// successive samples gives the latter.
+    private func recordClientUsage(_ clients: [WifiClient]) {
+        var deltas: [ClientUsageDelta] = []
+        for client in clients {
+            guard let mac = client.macAddress,
+                  let down = client.bytesDown, let up = client.bytesUp else { continue }
+            defer { lastClientCounters[mac] = (down, up) }
+            guard let previous = lastClientCounters[mac] else { continue }
+            // A counter that went backwards means the router restarted and
+            // reset it. Re-baseline rather than recording a negative or, worse,
+            // treating the new absolute value as a delta.
+            guard down >= previous.down, up >= previous.up else { continue }
+            let deltaDown = down - previous.down
+            let deltaUp = up - previous.up
+            guard deltaDown > 0 || deltaUp > 0 else { continue }
+            deltas.append(ClientUsageDelta(
+                mac: mac, name: client.name, down: deltaDown, up: deltaUp))
+        }
+        guard !deltas.isEmpty else { return }
+        Task { [store] in try? await store?.recordClientUsage(deltas) }
     }
 
     @discardableResult

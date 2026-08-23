@@ -99,6 +99,18 @@ actor DishSimulator {
     private var satElevationRate = 0.0
     private var events: [Event] = []
 
+    /// Cumulative per-device byte counters, the way a router reports them.
+    /// These have to genuinely accumulate: Cathode derives per-device usage by
+    /// differencing successive reads, so a constant would show as no usage.
+    private(set) var clientBytes: [String: (down: Double, up: Double)] = [:]
+    /// Share of household traffic per device, indexed against `Self.clientMACs`.
+    static let clientShares: [Double] = [0.44, 0.21, 0.14, 0.09, 0.06, 0.04, 0.02]
+    static let clientMACs = [
+        "4c:32:75:9a:1b:03", "a8:66:7f:11:d4:9e", "3c:22:fb:0d:77:52",
+        "f0:18:98:6c:2a:14", "18:b4:30:5f:c1:88", "b8:27:eb:44:19:a0",
+        "44:07:0b:9e:3c:21",
+    ]
+
     init(
         seed: UInt64 = 0xCA_70_DE,
         latitude: Double = 44.9778,
@@ -164,6 +176,7 @@ actor DishSimulator {
         ringSnr[idx] = Float(s.snr)
         ringObstructed[idx] = s.obstructed ? 1 : 0
         ringScheduled[idx] = s.scheduled ? 1 : 0
+        accumulateClientBytes(downlink: s.downlinkBps, uplink: s.uplinkBps)
         current += 1
     }
 
@@ -243,8 +256,22 @@ actor DishSimulator {
         let snr = max(0, snrBase + valueNoise(t / 17) * 0.6)
         let capacity = (185e6 + valueNoise(t / 240) * 55e6) * min(1.05, max(0, snr / 9.4))
 
-        let scheduled = !inOutage && !obstructed
-        let dropRate: Double = inOutage || obstructed
+        // Slot starvation: the network has no capacity to assign, with nothing
+        // blocking the sky. Real cells do this at peak, and it is the case the
+        // "lost time by cause" chart exists to separate from obstruction.
+        // A small baseline everywhere, climbing steeply at peak. Smooth noise
+        // rather than a per-second coin flip, because starvation arrives in
+        // runs of seconds, not as isolated blips.
+        let congestion = 0.004 + max(0, diurnal - 0.35) * 0.09
+        let starved = !obstructed && !inOutage && valueNoise(t / 3.5) < congestion
+
+        // An obstructed dish still *has* a scheduled slot — it simply cannot
+        // use it, because something is in the way. Only starvation and a full
+        // outage mean no slot was assigned. Conflating the two would make the
+        // lost-time-by-cause chart count every obstruction as congestion,
+        // which is the precise mistake that chart exists to correct.
+        let scheduled = !inOutage && !starved
+        let dropRate: Double = inOutage || obstructed || starved
             ? 1
             : min(1, max(0, rain * 0.09 + max(0, valueNoise(t / 7) - 0.86) * 0.5))
 
@@ -267,6 +294,18 @@ actor DishSimulator {
         return Sample(downlinkBps: downlink, uplinkBps: uplink, latencyMs: latency,
                       dropRate: dropRate, powerW: power, snr: snr,
                       obstructed: obstructed, scheduled: scheduled)
+    }
+
+    /// Distributes one second of throughput across the household, in bytes.
+    private func accumulateClientBytes(downlink: Double, uplink: Double) {
+        guard downlink > 0 || uplink > 0 else { return }
+        for (index, mac) in Self.clientMACs.enumerated() {
+            let share = Self.clientShares[index]
+            var entry = clientBytes[mac] ?? (0, 0)
+            entry.down += downlink * share / 8
+            entry.up += uplink * share / 8
+            clientBytes[mac] = entry
+        }
     }
 
     /// Records that the dish looked at this patch of sky, and whether it was clear.

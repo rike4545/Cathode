@@ -44,6 +44,29 @@ cluster, is the obstruction getting worse since the tree was trimmed.
 data moved in each direction, energy consumed with a monthly projection, and an
 optional allowance tracker on your billing cycle.
 
+**Lost time, attributed.** Every dropped second is assigned a cause, because
+"obstructed" and "the network had no slot to give you" look identical on a
+throughput chart and have nothing in common. One is fixed with a chainsaw; the
+other is Starlink capacity in your cell. Cathode is the only monitor that splits
+them, and the totals reconcile exactly — obstructed plus no-capacity plus other
+equals the seconds actually lost.
+
+**95th-percentile latency.** The average hides exactly the spikes that break a
+video call. p95 is what latency reaches in the worst second out of twenty, and
+it is the number that predicts whether a connection *feels* good.
+
+**Signal-to-noise history.** The dish has always sent a per-second SNR series
+and most tools discard it. A broad SNR sag with no obstruction is rain or snow;
+an obstruction cuts sharply and always in the same part of the sky. Together
+they answer "is it the weather or is it my trees". Newer firmware leaves the
+series at zero, in which case the chart is hidden rather than drawn empty.
+
+**Usage by device, over time.** The router reports only a running lifetime total
+per client, which answers the wrong question. Cathode samples those counters and
+stores the differences, so it can rank who has actually been using the
+connection today, this week, or this month — and it re-baselines rather than
+recording nonsense when a router reboot resets the counters.
+
 **Alerts that mean something.** The dish raises hardware alert bits, but most of
 what actually degrades a connection never sets one. Cathode watches latency,
 packet loss, obstruction, signal, throughput floor and stability, grades each

@@ -210,13 +210,48 @@ struct HistorySample: Sendable, Codable, Equatable, Identifiable {
     var latencyMs: Double?
     var dropRate: Double
     var powerW: Double?
+    /// Signal-to-noise ratio. Newer firmware stopped populating this series, so
+    /// it is nil far more often than the others; every consumer must cope.
+    var snr: Double?
     var obstructed: Bool
-    /// The dish had no scheduled slot in this second.
+    /// The dish had no scheduled slot in this second. Distinct from an
+    /// obstruction: nothing was blocking the sky, the network simply had no
+    /// capacity to assign — which is a complaint to Starlink, not a chainsaw.
     var noSchedule: Bool
 
     var id: Date { t }
     /// A second with total packet loss is an outage second, whatever the cause.
     var isOutage: Bool { dropRate >= 1 }
+
+    /// Why this second was lost, if it was. Attribution is ordered: a second
+    /// that is both obstructed and unscheduled is counted as obstructed,
+    /// because that is the cause the user can act on.
+    enum LossCause: String, Sendable, CaseIterable {
+        case obstructed, unscheduled, other
+
+        var label: String {
+            switch self {
+            case .obstructed: "Obstructed"
+            case .unscheduled: "No capacity"
+            case .other: "Other"
+            }
+        }
+        var detail: String {
+            switch self {
+            case .obstructed: "Something blocked the dish's view of the satellite."
+            case .unscheduled: "The network had no slot to assign. This is Starlink "
+                + "capacity in your cell, not anything at your end."
+            case .other: "Lost for a reason the dish did not attribute."
+            }
+        }
+    }
+
+    var lossCause: LossCause? {
+        guard isOutage else { return nil }
+        if obstructed { return .obstructed }
+        if noSchedule { return .unscheduled }
+        return .other
+    }
 }
 
 struct HistoryWindow: Sendable {

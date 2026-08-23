@@ -117,6 +117,45 @@ actor HistoryStore {
             );
             """)
         try exec("CREATE INDEX IF NOT EXISTS idx_outages_end ON outages(end_t);")
+
+        // Hourly per-device usage, derived by differencing the router's
+        // cumulative byte counters. Hourly rather than per-sample: a household
+        // of ten devices polled every twenty seconds would otherwise write
+        // fifteen thousand rows a day to answer a question nobody asks at that
+        // resolution.
+        try exec("""
+            CREATE TABLE IF NOT EXISTS client_usage (
+                hour  INTEGER NOT NULL,
+                mac   TEXT NOT NULL,
+                name  TEXT,
+                down  REAL NOT NULL DEFAULT 0,
+                up    REAL NOT NULL DEFAULT 0,
+                PRIMARY KEY (hour, mac)
+            );
+            """)
+        try exec("CREATE INDEX IF NOT EXISTS idx_client_usage_hour ON client_usage(hour);")
+
+        // Columns added after the first release. SQLite has no
+        // ADD COLUMN IF NOT EXISTS, so existing databases are upgraded by
+        // inspection rather than by dropping and losing recorded history.
+        try addColumn("samples", "snr", "REAL")
+        try addColumn("rollups", "snr_avg", "REAL")
+        try addColumn("rollups", "snr_min", "REAL")
+        try addColumn("rollups", "unscheduled_s", "INTEGER NOT NULL DEFAULT 0")
+    }
+
+    /// Adds a column when the table does not already have it.
+    private func addColumn(_ table: String, _ column: String, _ definition: String) throws {
+        let statement = try prepare("PRAGMA table_info(\(table));")
+        defer { sqlite3_finalize(statement) }
+        var existing: Set<String> = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let name = sqlite3_column_text(statement, 1) {
+                existing.insert(String(cString: name))
+            }
+        }
+        guard !existing.contains(column) else { return }
+        try exec("ALTER TABLE \(table) ADD COLUMN \(column) \(definition);")
     }
 
     private func exec(_ sql: String) throws {
@@ -159,8 +198,8 @@ actor HistoryStore {
         try exec("BEGIN IMMEDIATE;")
         do {
             let statement = try prepare("""
-                INSERT OR IGNORE INTO samples (t, down, up, latency, drop_, power, flags)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+                INSERT OR IGNORE INTO samples (t, down, up, latency, drop_, power, flags, snr)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                 """)
             defer { sqlite3_finalize(statement) }
             for s in samples {
@@ -176,6 +215,8 @@ actor HistoryStore {
                 if s.obstructed { flags |= Flag.obstructed }
                 if s.noSchedule { flags |= Flag.noSchedule }
                 sqlite3_bind_int(statement, 7, Int32(flags))
+                if let snr = s.snr { sqlite3_bind_double(statement, 8, snr) }
+                else { sqlite3_bind_null(statement, 8) }
                 guard sqlite3_step(statement) == SQLITE_DONE else {
                     throw StoreError(String(cString: sqlite3_errmsg(db)))
                 }
@@ -190,6 +231,45 @@ actor HistoryStore {
             throw error
         }
         pending.append(contentsOf: inserted)
+    }
+
+    /// Fills in values the live poll cannot supply.
+    ///
+    /// Status gives everything once a second except SNR, which only appears in
+    /// the dish's history series and therefore arrives later, by which time the
+    /// row already exists with a null. `INSERT OR IGNORE` cannot fill that in,
+    /// so the history path enriches explicitly rather than being dropped.
+    func enrich(_ samples: [HistorySample]) throws {
+        let withSNR = samples.filter { $0.snr != nil }
+        guard !withSNR.isEmpty else { return }
+        try exec("BEGIN IMMEDIATE;")
+        do {
+            let statement = try prepare(
+                "UPDATE samples SET snr = ? WHERE t = ? AND snr IS NULL;")
+            defer { sqlite3_finalize(statement) }
+            for sample in withSNR {
+                sqlite3_bind_double(statement, 1, sample.snr ?? 0)
+                sqlite3_bind_int64(statement, 2, Int64(sample.t.timeIntervalSince1970.rounded()))
+                guard sqlite3_step(statement) == SQLITE_DONE else {
+                    throw StoreError(String(cString: sqlite3_errmsg(db)))
+                }
+                sqlite3_reset(statement)
+            }
+            try exec("COMMIT;")
+        } catch {
+            try? exec("ROLLBACK;")
+            throw error
+        }
+
+        // Buffered seconds awaiting rollup need the same treatment, or the
+        // minute they belong to would roll up without any SNR at all.
+        let bySecond = Dictionary(
+            withSNR.map { (Int($0.t.timeIntervalSince1970.rounded()), $0.snr) },
+            uniquingKeysWith: { a, _ in a })
+        for index in pending.indices where pending[index].snr == nil {
+            let key = Int(pending[index].t.timeIntervalSince1970.rounded())
+            if let snr = bySecond[key] { pending[index].snr = snr }
+        }
     }
 
     func record(_ result: SpeedTestResult) throws {
@@ -209,6 +289,72 @@ actor HistoryStore {
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw StoreError(String(cString: sqlite3_errmsg(db)))
         }
+    }
+
+    /// Folds a set of per-device deltas into the current hour.
+    ///
+    /// The router reports cumulative counters, so callers difference them and
+    /// pass the change. Accumulating with `ON CONFLICT DO UPDATE` means a
+    /// missed sample loses that interval rather than corrupting the total.
+    func recordClientUsage(_ deltas: [ClientUsageDelta], at date: Date = .now) throws {
+        guard !deltas.isEmpty else { return }
+        let hour = Int64(date.timeIntervalSince1970) / 3600 * 3600
+        try exec("BEGIN IMMEDIATE;")
+        do {
+            let statement = try prepare("""
+                INSERT INTO client_usage (hour, mac, name, down, up)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(hour, mac) DO UPDATE SET
+                    down = down + excluded.down,
+                    up = up + excluded.up,
+                    name = COALESCE(excluded.name, name);
+                """)
+            defer { sqlite3_finalize(statement) }
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            for delta in deltas where delta.down > 0 || delta.up > 0 {
+                sqlite3_bind_int64(statement, 1, hour)
+                sqlite3_bind_text(statement, 2, delta.mac, -1, transient)
+                if let name = delta.name {
+                    sqlite3_bind_text(statement, 3, name, -1, transient)
+                } else {
+                    sqlite3_bind_null(statement, 3)
+                }
+                sqlite3_bind_double(statement, 4, delta.down)
+                sqlite3_bind_double(statement, 5, delta.up)
+                guard sqlite3_step(statement) == SQLITE_DONE else {
+                    throw StoreError(String(cString: sqlite3_errmsg(db)))
+                }
+                sqlite3_reset(statement)
+            }
+            try exec("COMMIT;")
+        } catch {
+            try? exec("ROLLBACK;")
+            throw error
+        }
+    }
+
+    /// Total bytes per device over a window, busiest first.
+    func clientUsage(from: Date, to: Date) throws -> [ClientUsageTotal] {
+        let statement = try prepare("""
+            SELECT mac, MAX(name), SUM(down), SUM(up)
+            FROM client_usage WHERE hour >= ? AND hour <= ?
+            GROUP BY mac ORDER BY SUM(down) + SUM(up) DESC;
+            """)
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, Int64(from.timeIntervalSince1970))
+        sqlite3_bind_int64(statement, 2, Int64(to.timeIntervalSince1970))
+
+        var out: [ClientUsageTotal] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            let mac = String(cString: sqlite3_column_text(statement, 0))
+            let name = sqlite3_column_type(statement, 1) == SQLITE_NULL
+                ? nil : String(cString: sqlite3_column_text(statement, 1))
+            out.append(ClientUsageTotal(
+                mac: mac, name: name,
+                down: sqlite3_column_double(statement, 2),
+                up: sqlite3_column_double(statement, 3)))
+        }
+        return out
     }
 
     func record(outage: OutageRecord) throws {
@@ -257,8 +403,9 @@ actor HistoryStore {
             let statement = try prepare("""
                 INSERT OR REPLACE INTO rollups
                 (t, down_avg, down_max, up_avg, up_max, lat_avg, lat_max, lat_p95,
-                 drop_avg, power_avg, bytes_down, bytes_up, obstructed_s, outage_s, samples)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 drop_avg, power_avg, bytes_down, bytes_up, obstructed_s, outage_s,
+                 samples, snr_avg, snr_min, unscheduled_s)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """)
             defer { sqlite3_finalize(statement) }
 
@@ -267,6 +414,7 @@ actor HistoryStore {
                 let ups = group.map(\.uplinkBps)
                 let latencies = group.compactMap(\.latencyMs).sorted()
                 let powers = group.compactMap(\.powerW)
+                let snrs = group.compactMap(\.snr)
 
                 sqlite3_bind_int64(statement, 1, Int64(minute * 60))
                 sqlite3_bind_double(statement, 2, downs.mean)
@@ -291,6 +439,14 @@ actor HistoryStore {
                 sqlite3_bind_int(statement, 13, Int32(group.count(where: { $0.obstructed })))
                 sqlite3_bind_int(statement, 14, Int32(group.count(where: { $0.isOutage })))
                 sqlite3_bind_int(statement, 15, Int32(group.count))
+                if snrs.isEmpty {
+                    sqlite3_bind_null(statement, 16)
+                    sqlite3_bind_null(statement, 17)
+                } else {
+                    sqlite3_bind_double(statement, 16, snrs.mean)
+                    sqlite3_bind_double(statement, 17, snrs.min() ?? 0)
+                }
+                sqlite3_bind_int(statement, 18, Int32(group.count(where: { $0.noSchedule })))
 
                 guard sqlite3_step(statement) == SQLITE_DONE else {
                     throw StoreError(String(cString: sqlite3_errmsg(db)))
@@ -321,13 +477,16 @@ actor HistoryStore {
                    AVG(latency), MAX(latency), AVG(drop_), AVG(power),
                    SUM(CASE WHEN flags & 1 THEN 1 ELSE 0 END),
                    SUM(CASE WHEN drop_ >= 1 THEN 1 ELSE 0 END),
-                   COUNT(*)
+                   COUNT(*),
+                   NULL, AVG(snr), MIN(snr),
+                   SUM(CASE WHEN flags & 2 THEN 1 ELSE 0 END)
             FROM samples WHERE t >= ? AND t <= ? GROUP BY bucket ORDER BY bucket;
             """ : """
             SELECT (t / ?) * ? AS bucket,
                    AVG(down_avg), MAX(down_max), AVG(up_avg), MAX(up_max),
                    AVG(lat_avg), MAX(lat_max), AVG(drop_avg), AVG(power_avg),
-                   SUM(obstructed_s), SUM(outage_s), SUM(samples)
+                   SUM(obstructed_s), SUM(outage_s), SUM(samples),
+                   MAX(lat_p95), AVG(snr_avg), MIN(snr_min), SUM(unscheduled_s)
             FROM rollups WHERE t >= ? AND t <= ? GROUP BY bucket ORDER BY bucket;
             """
 
@@ -352,7 +511,11 @@ actor HistoryStore {
                 powerAvg: nullableDouble(statement, 8),
                 obstructedSeconds: Int(sqlite3_column_int64(statement, 9)),
                 outageSeconds: Int(sqlite3_column_int64(statement, 10)),
-                sampleCount: Int(sqlite3_column_int64(statement, 11))))
+                sampleCount: Int(sqlite3_column_int64(statement, 11)),
+                latencyP95: nullableDouble(statement, 12),
+                snrAvg: nullableDouble(statement, 13),
+                snrMin: nullableDouble(statement, 14),
+                unscheduledSeconds: Int(sqlite3_column_int64(statement, 15))))
         }
         return out
     }
@@ -371,19 +534,21 @@ actor HistoryStore {
     /// Uptime for a window: the share of recorded seconds that were not outages.
     func uptime(from: Date, to: Date) throws -> UptimeSummary {
         let statement = try prepare("""
-            SELECT SUM(samples), SUM(outage_s), SUM(obstructed_s)
+            SELECT SUM(samples), SUM(outage_s), SUM(obstructed_s), SUM(unscheduled_s)
             FROM rollups WHERE t >= ? AND t <= ?;
             """)
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_int64(statement, 1, Int64(from.timeIntervalSince1970))
         sqlite3_bind_int64(statement, 2, Int64(to.timeIntervalSince1970))
         guard sqlite3_step(statement) == SQLITE_ROW else {
-            return UptimeSummary(recordedSeconds: 0, outageSeconds: 0, obstructedSeconds: 0)
+            return UptimeSummary(recordedSeconds: 0, outageSeconds: 0,
+                                 obstructedSeconds: 0, unscheduledSeconds: 0)
         }
         return UptimeSummary(
             recordedSeconds: Int(sqlite3_column_int64(statement, 0)),
             outageSeconds: Int(sqlite3_column_int64(statement, 1)),
-            obstructedSeconds: Int(sqlite3_column_int64(statement, 2)))
+            obstructedSeconds: Int(sqlite3_column_int64(statement, 2)),
+            unscheduledSeconds: Int(sqlite3_column_int64(statement, 3)))
     }
 
     func outages(from: Date, to: Date, limit: Int = 200) throws -> [OutageRecord] {
@@ -462,7 +627,7 @@ actor HistoryStore {
     }
 
     func eraseAll() throws {
-        for table in ["samples", "rollups", "outages", "speedtests"] {
+        for table in ["samples", "rollups", "outages", "speedtests", "client_usage"] {
             try exec("DELETE FROM \(table);")
         }
         pending.removeAll()
@@ -489,6 +654,15 @@ struct Aggregate: Sendable, Identifiable, Equatable {
     var obstructedSeconds: Int
     var outageSeconds: Int
     var sampleCount: Int
+    /// 95th-percentile latency: the worst per-minute p95 inside this bucket.
+    /// Not a true percentile across the whole bucket — that would need the raw
+    /// samples, which are discarded after 48 hours — but it is the figure that
+    /// tracks "how bad does it actually get".
+    var latencyP95: Double?
+    var snrAvg: Double?
+    var snrMin: Double?
+    /// Seconds the network had no slot to assign. Capacity, not obstruction.
+    var unscheduledSeconds: Int = 0
 
     var id: Date { t }
     /// True when the bucket is entirely down — drawn as a gap, not a zero.
@@ -507,6 +681,18 @@ struct UptimeSummary: Sendable, Equatable {
     var recordedSeconds: Int
     var outageSeconds: Int
     var obstructedSeconds: Int
+    var unscheduledSeconds: Int = 0
+
+    /// Lost seconds split by what caused them, most actionable first.
+    /// Obstruction wins ties: it is the one the user can do something about.
+    var lossBreakdown: [(cause: HistorySample.LossCause, seconds: Int)] {
+        guard outageSeconds > 0 else { return [] }
+        let obstructed = min(obstructedSeconds, outageSeconds)
+        let unscheduled = min(unscheduledSeconds, outageSeconds - obstructed)
+        let other = max(0, outageSeconds - obstructed - unscheduled)
+        return [(.obstructed, obstructed), (.unscheduled, unscheduled), (.other, other)]
+            .filter { $0.1 > 0 }
+    }
 
     /// Availability as a fraction. Nil when nothing has been recorded yet, so
     /// the UI can say "no data" instead of claiming a perfect 100%.
@@ -520,6 +706,25 @@ struct UptimeSummary: Sendable, Equatable {
         guard let availability, availability < 1 else { return "100%" }
         return Format.decimal(availability * 100, places: availability > 0.999 ? 3 : 2) + "%"
     }
+}
+
+/// One device's change in cumulative counters since the previous sample.
+struct ClientUsageDelta: Sendable, Equatable {
+    var mac: String
+    var name: String?
+    var down: Double
+    var up: Double
+}
+
+struct ClientUsageTotal: Sendable, Identifiable, Equatable {
+    var mac: String
+    var name: String?
+    var down: Double
+    var up: Double
+
+    var id: String { mac }
+    var total: Double { down + up }
+    var displayName: String { name ?? mac }
 }
 
 struct StoreStatistics: Sendable, Equatable {

@@ -244,7 +244,8 @@ final class SimulatorTransport: DishTransport {
     /// A believable household: a mix of bands, wired gear, and idle devices.
     private static func simulatedClients(_ sim: DishSimulator) async -> [WifiClient] {
         let total = await sim.latest
-        let share: [Double] = [0.44, 0.21, 0.14, 0.09, 0.06, 0.04, 0.02]
+        let counters = await sim.clientBytes
+        let share = DishSimulator.clientShares
         let devices: [(String, String, String, Double?, Bool)] = [
             ("Living Room TV", "4c:32:75:9a:1b:03", "192.168.1.24", -52, false),
             ("Bryan's iPhone", "a8:66:7f:11:d4:9e", "192.168.1.31", -61, false),
@@ -261,8 +262,8 @@ final class SimulatorTransport: DishTransport {
                 signalStrength: d.3,
                 txBps: total.uplinkBps * weight,
                 rxBps: total.downlinkBps * weight,
-                bytesDown: weight * 84e9,
-                bytesUp: weight * 6.2e9,
+                bytesDown: counters[d.1]?.down ?? 0,
+                bytesUp: counters[d.1]?.up ?? 0,
                 connectedTimeS: Double(3600 * (index + 2)),
                 isWifi: !d.4, isWired: d.4,
                 band: d.4 ? nil : (index % 3 == 0 ? "5 GHz" : "2.4 GHz"))

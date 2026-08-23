@@ -59,6 +59,7 @@ struct HistoryScreen: View {
                         throughputChart
                         latencyChart
                         reliabilityPanel
+                        signalChart
                         powerChart
                         if !trends.isEmpty { trendPanel }
                         hourlyPanel
@@ -227,7 +228,7 @@ struct HistoryScreen: View {
     }
 
     private var latencyChart: some View {
-        Panel("Latency", subtitle: "Average and worst per bucket") {
+        Panel("Latency", subtitle: latencySubtitle) {
             Chart {
                 ForEach(series) { point in
                     if let max = point.latencyMax {
@@ -238,8 +239,16 @@ struct HistoryScreen: View {
                             width: .fixed(1.5))
                             .foregroundStyle(Color.latency.opacity(0.28))
                     }
+                    if let p95 = point.latencyP95 {
+                        LineMark(x: .value("Time", point.t), y: .value("p95", p95),
+                                 series: .value("Series", "p95"))
+                            .foregroundStyle(Color.warn)
+                            .lineStyle(.init(lineWidth: 1.2, dash: [3, 2]))
+                            .interpolationMethod(.monotone)
+                    }
                     if let avg = point.latencyAvg {
-                        LineMark(x: .value("Time", point.t), y: .value("Latency", avg))
+                        LineMark(x: .value("Time", point.t), y: .value("Latency", avg),
+                                 series: .value("Series", "avg"))
                             .foregroundStyle(Color.latency)
                             .lineStyle(.init(lineWidth: 1.6))
                             .interpolationMethod(.monotone)
@@ -248,29 +257,120 @@ struct HistoryScreen: View {
             }
             .chartYAxisLabel("ms", position: .leading)
             .chartStyle(height: 150)
-            Text("Bars show the worst latency inside each bucket, so a spike that "
-                 + "lasted one second still survives being averaged.")
+            HStack(spacing: 14) {
+                legendSwatch(.latency, "Average", dashed: false)
+                legendSwatch(.warn, "95th percentile", dashed: true)
+                legendSwatch(.latency.opacity(0.3), "Range to worst", dashed: false)
+            }
+            Text("The 95th percentile is the number that decides whether calls hold "
+                 + "up: it is what latency reaches in the worst one second out of "
+                 + "twenty, which an average hides completely.")
                 .font(.caption2)
+                .foregroundStyle(Color.inkTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var latencySubtitle: String {
+        let values = series.compactMap(\.latencyP95)
+        guard !values.isEmpty else { return "Average and worst per bucket" }
+        return "Typical worst case \(Int(values.sorted().percentile(0.5))) ms"
+    }
+
+    private func legendSwatch(_ color: Color, _ label: String, dashed: Bool) -> some View {
+        HStack(spacing: 5) {
+            if dashed {
+                Rectangle().fill(color).frame(width: 4, height: 2)
+                Rectangle().fill(color).frame(width: 4, height: 2)
+            } else {
+                Capsule().fill(color).frame(width: 12, height: 2.5)
+            }
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(Color.inkTertiary)
         }
     }
 
+    /// Lost time, attributed. The distinction that matters here is between an
+    /// obstruction — something in the way, which the user can fix — and an
+    /// unscheduled second, where the network simply had no slot to give. They
+    /// look identical on a throughput chart and have nothing in common.
     private var reliabilityPanel: some View {
-        Panel("Reliability", subtitle: "Seconds lost and seconds obstructed") {
+        Panel("Lost time", subtitle: "By cause") {
             Chart {
                 ForEach(series) { point in
-                    BarMark(
-                        x: .value("Time", point.t),
-                        y: .value("Outage", point.outageSeconds))
-                        .foregroundStyle(Color.bad)
-                    BarMark(
-                        x: .value("Time", point.t),
-                        y: .value("Obstructed", point.obstructedSeconds))
-                        .foregroundStyle(Color.obstruction.opacity(0.6))
+                    BarMark(x: .value("Time", point.t),
+                            y: .value("Obstructed", point.obstructedSeconds))
+                        .foregroundStyle(by: .value("Cause", "Obstructed"))
+                    BarMark(x: .value("Time", point.t),
+                            y: .value("No capacity", point.unscheduledSeconds))
+                        .foregroundStyle(by: .value("Cause", "No capacity"))
+                    BarMark(x: .value("Time", point.t),
+                            y: .value("Other", max(0, point.outageSeconds
+                                                   - point.obstructedSeconds
+                                                   - point.unscheduledSeconds)))
+                        .foregroundStyle(by: .value("Cause", "Other"))
                 }
             }
+            .chartForegroundStyleScale([
+                "Obstructed": Color.obstruction,
+                "No capacity": Color.warn,
+                "Other": Color.bad,
+            ])
+            .chartLegend(position: .bottom, spacing: 8)
             .chartYAxisLabel("seconds", position: .leading)
-            .chartStyle(height: 110)
+            .chartStyle(height: 120)
+
+            if !uptime.lossBreakdown.isEmpty {
+                Divider().overlay(Color.hairline)
+                ForEach(uptime.lossBreakdown, id: \.cause) { entry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        MetricRow(label: entry.cause.label,
+                                  value: Format.preciseDuration(Double(entry.seconds)))
+                        Text(entry.cause.detail)
+                            .font(.caption2)
+                            .foregroundStyle(Color.inkTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, 3)
+                }
+            }
+        }
+    }
+
+    /// Only shown when the firmware actually reports SNR. Newer builds leave the
+    /// series at zero, and an empty chart is worse than no chart.
+    @ViewBuilder
+    private var signalChart: some View {
+        let points = series.filter { $0.snrAvg != nil }
+        if points.count > 3 {
+            Panel("Signal to noise", subtitle: "Weather shows up here before anywhere else") {
+                Chart {
+                    ForEach(points) { point in
+                        if let low = point.snrMin, let avg = point.snrAvg {
+                            AreaMark(x: .value("Time", point.t),
+                                     yStart: .value("Min", low),
+                                     yEnd: .value("Avg", avg))
+                                .foregroundStyle(Color.good.opacity(0.18))
+                                .interpolationMethod(.monotone)
+                        }
+                        if let avg = point.snrAvg {
+                            LineMark(x: .value("Time", point.t), y: .value("SNR", avg))
+                                .foregroundStyle(Color.good)
+                                .lineStyle(.init(lineWidth: 1.5))
+                                .interpolationMethod(.monotone)
+                        }
+                    }
+                }
+                .chartYAxisLabel("dB", position: .leading)
+                .chartStyle(height: 130)
+                Text("A broad sag with no obstruction is almost always rain or snow. "
+                     + "An obstruction cuts sharply and always in the same part of "
+                     + "the sky — the Sky tab will show where.")
+                    .font(.caption2)
+                    .foregroundStyle(Color.inkTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

@@ -3,6 +3,26 @@ import SwiftUI
 struct NetworkScreen: View {
     @Environment(AppModel.self) private var model
     @State private var sort: Sort = .throughput
+    @State private var usageRange: UsageRange = .day
+    @State private var usage: [ClientUsageTotal] = []
+
+    enum UsageRange: String, CaseIterable, Hashable {
+        case day, week, month
+        var label: String {
+            switch self {
+            case .day: "24H"
+            case .week: "7D"
+            case .month: "30D"
+            }
+        }
+        var seconds: TimeInterval {
+            switch self {
+            case .day: 86_400
+            case .week: 604_800
+            case .month: 2_592_000
+            }
+        }
+    }
 
     enum Sort: String, CaseIterable, Hashable {
         case throughput, name, signal, total
@@ -37,6 +57,7 @@ struct NetworkScreen: View {
                         routerPanel
                         clientsPanel
                     }
+                    usagePanel
                 }
                 .padding(.horizontal, Metrics.gutter)
                 .padding(.bottom, 28)
@@ -44,6 +65,8 @@ struct NetworkScreen: View {
             .background(Color.ground)
             .navigationTitle("Network")
             .navigationBarTitleDisplayMode(.large)
+            .task(id: usageRange) { await loadUsage() }
+            .refreshable { await loadUsage() }
         }
     }
 
@@ -119,6 +142,47 @@ struct NetworkScreen: View {
                 }
             }
         }
+    }
+
+    /// Usage per device over time.
+    ///
+    /// The router only reports a running lifetime total per client, which
+    /// answers the wrong question. Cathode samples those counters and stores
+    /// the differences, so this can answer the one people actually ask: who has
+    /// been using the connection this week.
+    private var usagePanel: some View {
+        Panel("Usage by device", subtitle: "Measured by Cathode, not the router") {
+            VStack(spacing: 12) {
+                SegmentPicker(options: UsageRange.allCases.map { ($0, $0.label) },
+                              selection: $usageRange)
+                if usage.isEmpty {
+                    EmptyPanel(
+                        icon: "chart.bar.xaxis",
+                        message: "Nothing recorded yet",
+                        detail: "Cathode builds this by watching the router's per-device "
+                              + "counters while it runs. Leave it connected and it fills in.")
+                } else {
+                    let peak = usage.first?.total ?? 1
+                    let total = usage.reduce(0) { $0 + $1.total }
+                    ForEach(usage.prefix(12)) { entry in
+                        UsageRow(entry: entry, peak: peak, share: total > 0 ? entry.total / total : 0)
+                        if entry.id != usage.prefix(12).last?.id {
+                            Divider().overlay(Color.hairline)
+                        }
+                    }
+                    Divider().overlay(Color.hairline)
+                    MetricRow(label: "Total across \(usage.count) devices",
+                              value: Format.bytes(total).combined)
+                }
+            }
+        }
+    }
+
+    private func loadUsage() async {
+        guard let store = model.store else { return }
+        let to = Date.now
+        usage = (try? await store.clientUsage(
+            from: to.addingTimeInterval(-usageRange.seconds), to: to)) ?? []
     }
 
     /// Scale every device's bar against the busiest one, so the list reads as a
@@ -198,6 +262,55 @@ struct ClientRow: View {
         if name.contains("speaker") || name.contains("echo") || name.contains("sonos") { return "hifispeaker" }
         if name.contains("thermostat") || name.contains("nest") { return "thermometer.medium" }
         return "wifi"
+    }
+}
+
+struct UsageRow: View {
+    var entry: ClientUsageTotal
+    var peak: Double
+    /// Fraction of all recorded usage in the window.
+    var share: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(entry.displayName)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(Format.bytes(entry.total).combined)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.ink)
+            }
+            GeometryReader { geo in
+                HStack(spacing: 1.5) {
+                    Capsule().fill(Color.downlink)
+                        .frame(width: max(2, geo.size.width * (entry.down / max(1, peak))))
+                    Capsule().fill(Color.uplink)
+                        .frame(width: max(1, geo.size.width * (entry.up / max(1, peak))))
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(height: 6)
+            HStack(spacing: 10) {
+                Text("↓ \(Format.bytes(entry.down).combined)")
+                    .foregroundStyle(Color.downlink)
+                Text("↑ \(Format.bytes(entry.up).combined)")
+                    .foregroundStyle(Color.uplink)
+                Spacer()
+                Text("\(Int((share * 100).rounded()))% of total")
+                    .foregroundStyle(Color.inkTertiary)
+            }
+            .font(.system(size: 10, design: .rounded))
+            .monospacedDigit()
+        }
+        .padding(.vertical, 9)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(entry.displayName)
+        .accessibilityValue("\(Format.bytes(entry.total).combined), "
+            + "\(Int((share * 100).rounded())) percent of all usage")
     }
 }
 
