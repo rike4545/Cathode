@@ -6,6 +6,8 @@ Cathode reads the dish directly over your own network, using the local gRPC API
 the hardware already exposes. No account, no cloud service, no telemetry, no
 third-party dependencies — just the app and the hardware.
 
+If it's useful to you, you can [support the project](https://buymeacoffee.com/myevcompanionapp).
+
 <p align="center">
   <img src="docs/screenshots/dashboard.png" width="205" alt="Dashboard: health score, live throughput ribbon, latency and loss tiles">
   <img src="docs/screenshots/sky.png" width="205" alt="Sky: obstruction dome with satellite track and placement advisor">
