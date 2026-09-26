@@ -1,19 +1,19 @@
-# <img src="docs/logo.svg" alt="" width="34" height="34" align="top"> Dishylink
+# <img src="docs/logo.svg" alt="" width="34" height="34" align="top"> Cathode
 
-[![Downloads](https://img.shields.io/github/downloads/DaveyHert/dishylink/total.svg)](https://github.com/DaveyHert/dishylink/releases)
-[![macOS](https://img.shields.io/badge/macOS-12.0+-black.svg)](https://github.com/DaveyHert/dishylink/releases/latest)
-[![Windows](https://img.shields.io/badge/Windows-10+-0078D4.svg)](https://github.com/DaveyHert/dishylink/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/DaveyHert/dishylink/total.svg)](https://github.com/rike4545/Cathode/releases)
+[![macOS](https://img.shields.io/badge/macOS-12.0+-black.svg)](https://github.com/rike4545/Cathode/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10+-0078D4.svg)](https://github.com/rike4545/Cathode/releases/latest)
 [![Browsers](https://img.shields.io/badge/Chrome%20%7C%20Edge%20%7C%20Firefox-extension-FF6F00.svg)](#browser-extension-chrome-edge-firefox)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![X](https://img.shields.io/badge/X-%23000000.svg?style=flat&logo=X&logoColor=white)](https://x.com/daveyhert)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%23FFDD00.svg?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/daveyhert)
 
 An open-source Starlink desktop app for macOS, Windows and browsers to monitor
 the performance and health of your Starlink.
 
+Cathode is an independent fork of [Dishylink](https://github.com/DaveyHert/dishylink). The upstream project and its original contributors remain credited under the MIT license; Cathode maintains its own builds, releases, security reporting, and update channel.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="landing/src/assets/shots/dashboard-dark.png">
-  <img alt="The Dishylink dashboard: download, upload, latency, power draw, ping success and sky-obstruction tiles above live throughput, latency and power charts, with the 3D obstruction dome and an events and outages log alongside." src="landing/src/assets/shots/dashboard-light.png">
+  <img alt="The Cathode dashboard: download, upload, latency, power draw, ping success and sky-obstruction tiles above live throughput, latency and power charts, with the 3D obstruction dome and an events and outages log alongside." src="landing/src/assets/shots/dashboard-light.png">
 </picture>
 
 It reads your dish and router directly over your local network, so it keeps
@@ -37,7 +37,7 @@ only to Starlink.
 | <img src="landing/public/browsers/edge.svg" alt="" width="16" align="top"> **Edge**          | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
 | <img src="landing/public/browsers/firefox.svg" alt="" width="16" align="top"> **Firefox**    | Extension | Any                    |                     [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://addons.mozilla.org/addon/dishylink/)                     |
 
-[latest]: https://github.com/DaveyHert/dishylink/releases/latest
+[latest]: https://github.com/rike4545/Cathode/releases/latest
 
 Not sure which to pick? On Windows, take Universal. On macOS, take `arm64` for
 Apple silicon (M1 and later) or `x64` for Intel.
@@ -91,17 +91,17 @@ below as requiring an optional Starlink account connection:
   stow/unstow motorized kits.
 - **Router**: SSIDs and their bands, mesh node trust, firmware and country, and
   a router reboot.
-- **Router address and subnet**: point Dishylink at a router that isn't on the
+- **Router address and subnet**: point Cathode at a router that isn't on the
   default address, and change the address range the router hands out. Changing the
   subnet needs a connected account.
 - **Custom DNS**: point the router at your own resolvers.
 - **Bypass mode**: put the router into bridge mode for your own networking gear.
 - **Connected devices**: pause or unpause another device while it is connected.
   Available in the desktop app and web development harness, this control requires
-  an optional Starlink account sign-in: Dishylink reads the router configuration
+  an optional Starlink account sign-in: Cathode reads the router configuration
   locally, prepares the smallest accepted client update on the trusted host, and
   sends it only to Starlink's authenticated device endpoint. The device running
-  Dishylink cannot pause itself, which is what **Your device on this network** in
+  Cathode cannot pause itself, which is what **Your device on this network** in
   app settings pins down. The browser extension does not expose this control
   because ordinary desktop extensions cannot reliably read the host computer's LAN
   IP or MAC address. Although the extension can send the update, it cannot prove
@@ -125,11 +125,11 @@ Meter any device on your network and pause it automatically when it goes over.
   whether you wrote it there or from a device's own card, each showing how much of
   its limit is left.
 - Rules use the same account-connected pausing described above, including the
-  protection that stops Dishylink pausing the device it is running on.
+  protection that stops Cathode pausing the device it is running on.
 
 ## Three ways to run it in dev
 
-Dishylink ships as three independent products from one codebase. To run any of
+Cathode ships as three independent products from one codebase. To run any of
 them from source:
 
 ```bash
@@ -265,5 +265,5 @@ storage, never transmitted.
 
 MIT. See [LICENSE](LICENSE).
 
-Dishylink is an unofficial, independent project with no affiliation to SpaceX or
+Cathode is an unofficial, independent project with no affiliation to SpaceX or
 Starlink. Starlink is a trademark of Space Exploration Technologies Corp.
