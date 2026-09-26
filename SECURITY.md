@@ -4,12 +4,9 @@
 
 Please report security issues privately rather than opening a public issue. Use
 the **Report a vulnerability** button on this repository's
-[Security tab](https://github.com/DaveyHert/Dishylink/security/advisories/new),
-which opens a private thread visible only to you and the maintainer. If you
-would rather use email, **hello@dishylink.com** reaches the same place.
-
-Include what you found, how to reproduce it, which platform you were on, and the
-version of Dishylink you were running.
+[Security tab](https://github.com/rike4545/Cathode/security/advisories/new),
+which opens a private thread visible only to you and the maintainer. Include what you found, how to reproduce it, which platform you were on, and the
+version of Cathode you were running.
 
 Reports are read and answered on a best effort basis by a single maintainer.
 Please allow a reasonable window for a fix before sharing details publicly.
@@ -40,7 +37,7 @@ Out of scope:
 
 ## Testing
 
-Test against hardware you own. Dishylink talks to a dish and router on your own
+Test against hardware you own. Cathode talks to a dish and router on your own
 network, and the router is a small embedded device that has been observed
 rebooting under ordinary polling load. Please do not fuzz or stress its
 endpoints. A crashed router takes the whole connection down with it, and that on
