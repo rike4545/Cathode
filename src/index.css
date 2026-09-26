@@ -1,4 +1,4 @@
-/* Dishylink — Starlink companion desktop app & browser extension design language. Theme tokens, the base reset, and
+/* Cathode — Starlink companion desktop app & browser extension design language. Theme tokens, the base reset, and
    the handful of rules that have no Tailwind utility: keyframes, scrollbar
    pseudo-elements, and positional selectors. Everything else is utilities in
    the components. */
@@ -100,8 +100,9 @@
   --sky-obstructed: #f51e1e;
   --sky-unmapped: #7c7c7c;
 
-  --font-ui: "Barlow", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  /* System stacks keep the dashboard fully local/offline and avoid third-party font requests. */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
 
   color-scheme: dark;
 }
