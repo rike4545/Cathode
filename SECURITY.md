@@ -5,7 +5,9 @@
 Please report security issues privately rather than opening a public issue. Use
 the **Report a vulnerability** button on this repository's
 [Security tab](https://github.com/rike4545/Cathode/security/advisories/new),
-which opens a private thread visible only to you and the maintainer. Include what you found, how to reproduce it, which platform you were on, and the
+which opens a private thread visible only to you and the maintainer.
+
+Include what you found, how to reproduce it, which platform you were on, and the
 version of Cathode you were running.
 
 Reports are read and answered on a best effort basis by a single maintainer.
