@@ -1,13 +1,13 @@
 {
   "name": "dishylink",
-  "productName": "Dishylink",
+  "productName": "Cathode",
   "private": true,
   "version": "1.1.0",
   "type": "module",
   "main": "dist-electron/main.js",
   "author": "daveyhert <daviehert@gmail.com>",
   "license": "MIT",
-  "description": "An open-source desktop app to monitor the performance and health of your Starlink.",
+  "description": "Cathode is an open-source desktop and browser companion for monitoring the performance and health of your Starlink.",
   "scripts": {
     "postinstall": "wxt prepare",
     "dev": "vite",
