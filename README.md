@@ -34,7 +34,7 @@ only to Starlink.
 | <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `x64`                  |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
 | <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `arm64`                |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
 | <img src="landing/public/browsers/chrome.svg" alt="" width="16" align="top"> **Chrome** 144+ | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
-| <img src="landing/public/browsers/edge.svg" alt="" width="16" align="top"> **Edge**          | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
+| <img src="landing/public/browsers/edge.svg" alt="" width="16" align="top"> **Edge**          | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://microsoftedge.microsoft.com/addons/detail/pknccegejhlgmeiojalenedmkbcaimdo)  |
 | <img src="landing/public/browsers/firefox.svg" alt="" width="16" align="top"> **Firefox**    | Extension | Any                    |                     [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://addons.mozilla.org/addon/dishylink/)                     |
 
 [latest]: https://github.com/DaveyHert/dishylink/releases/latest
@@ -157,7 +157,38 @@ npm run pack:win        # Windows build
 npm run build:extension # Chromium extension bundle
 npm run build:extension:firefox
 npm run build:extension:edge
+docker compose up --build   # browser dashboard + recorder, this machine only
 ```
+
+### Docker (browser)
+
+Packages the web dashboard and the history recorder in one container. The
+image is built **only for the CPU of the machine you clone and build on** —
+amd64 on an x86 box, arm64 on Apple Silicon or a 64-bit Raspberry Pi. Compose
+does not cross-build. Open `http://localhost:8080`. The **host running Docker
+must be on the Starlink LAN** — the dish (`192.168.100.1`) and router
+(`192.168.1.1`) are reached through the host, not from inside Compose. Docker
+Desktop has no real `--network host`; do not set it.
+
+```bash
+docker compose up --build
+```
+
+A Raspberry Pi 4/5 needs the 64-bit OS and enough RAM for the Vite build
+(4 GB is comfortable; 2 GB often OOMs).
+
+Recordings, and a pasted starlink.com session, persist in the `historian-data`
+volume — a session survives a restart with no extra mount needed. If
+`com.dishylink.historian` is already running under launchd, stop it first —
+two recorders double the router's 200 ms client poll.
+
+Optional, in `compose.yaml`:
+
+- `HOST_LAN_IP` / `HOST_MAC` — the host's LAN address, so "This device" and
+  pause-self-protect still work through Docker Desktop's port publish.
+
+Cloud session writes stay localhost-only. Opening the dashboard via the host's
+LAN IP from a phone still shows live data and history.
 
 Useful while working on it:
 
@@ -186,7 +217,8 @@ A fresh desktop build opens with no history by design: it fills up as it runs.
 ### Browser extension (Chrome, Edge, Firefox)
 
 Install it from the
-[Chrome Web Store](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna)
+[Chrome Web Store](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna),
+[Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/pknccegejhlgmeiojalenedmkbcaimdo)
 or [Firefox Add-ons](https://addons.mozilla.org/addon/dishylink/).
 
 - The toolbar icon opens the dashboard as a chromeless window (default) or an
