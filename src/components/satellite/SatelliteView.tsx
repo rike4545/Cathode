@@ -33,6 +33,7 @@ import { useTvSatellites } from "../../hooks/useTvSatellites";
 import { domeTrimEnabled, setDomeTrimEnabled } from "../../lib/domeTrim";
 import { setTvSatellitesEnabled } from "../../lib/tvSatellites";
 import { buildGeoOverlay } from "./geoBelt";
+import { TvSatelliteFinder } from "./TvSatelliteFinder";
 
 /** Panels float over the sky rather than covering it: dark enough to hold text,
  *  sheer enough that satellites keep crossing behind them. No blur — the sky
@@ -93,6 +94,8 @@ export function SatelliteView({
   const [immersive, setImmersive] = useState(false);
   const trimmed = useDomeTrim();
   const tvShown = useTvSatellites();
+  /** The slot picked in the TV satellite finder, whose tag is picked out on the dome. */
+  const [finderSlotId, setFinderSlotId] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   // The picker opens to its form when there is no location, and folds away once one
   // exists — which can happen after the first render, when the dish's GPS arrives.
@@ -432,6 +435,10 @@ export function SatelliteView({
           </p>
         )}
 
+        {tvShown && observerLocation && (
+          <TvSatelliteFinder observer={observerLocation} onSlotChange={setFinderSlotId} />
+        )}
+
         {!viewingHistory && hasSurvey && (
           <p className='m-0 text-xs leading-relaxed text-[#8b97a8]'>
             {(obstructionStats?.fractionObstructed ?? 0) < 0.005
@@ -468,7 +475,13 @@ export function SatelliteView({
             else geoLabelRefs.current.delete(anchor.id);
           }}
           className='pointer-events-none absolute left-0 top-0 whitespace-nowrap font-mono text-[10.5px] tracking-wide'
-          style={{ opacity: 0, willChange: "transform", color: "#8ff5c8" }}
+          style={{
+            opacity: 0,
+            willChange: "transform",
+            // The slot picked in the finder stands out from the rest.
+            color: anchor.id === finderSlotId ? "#ffffff" : "#8ff5c8",
+            fontWeight: anchor.id === finderSlotId ? 700 : 400,
+          }}
         >
           <span className='absolute pl-2' style={{ marginTop: -14 }}>
             {anchor.label}
