@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Minimize2, Pause, Play } from "lucide-react";
+import { Minimize2, Pause, Play, SatelliteDish } from "lucide-react";
 import type {
   DishObstructionMapJson,
   DishObstructionStatsJson,
@@ -29,7 +29,10 @@ import { DomeIcon } from "../../assets/icons/DomeIcon";
 import { DomeCanopyIcon } from "../../assets/icons/DomeCanopyIcon";
 import { ImmersiveIcon } from "../../assets/icons/ImmersiveIcon";
 import { useDomeTrim } from "../../hooks/useDomeTrim";
+import { useTvSatellites } from "../../hooks/useTvSatellites";
 import { domeTrimEnabled, setDomeTrimEnabled } from "../../lib/domeTrim";
+import { setTvSatellitesEnabled } from "../../lib/tvSatellites";
+import { buildGeoOverlay } from "./geoBelt";
 
 /** Panels float over the sky rather than covering it: dark enough to hold text,
  *  sheer enough that satellites keep crossing behind them. No blur — the sky
@@ -78,6 +81,8 @@ export function SatelliteView({
   const labelRef = useRef<HTMLDivElement | null>(null);
   const calloutRef = useRef<HTMLDivElement | null>(null);
   const ringRef = useRef<HTMLSpanElement | null>(null);
+  /** The on-screen tag for each TV-satellite slot, by anchor id. */
+  const geoLabelRefs = useRef(new Map<string, HTMLSpanElement>());
   const [selected, setSelected] = useState<SelectedSatellite | null>(null);
   // Seeded from the scene as it is built, so the button reports the camera's
   // state rather than a copy of its default that can drift out of step.
@@ -87,6 +92,7 @@ export function SatelliteView({
   // and its controls. The buttons stay so the view can be left again.
   const [immersive, setImmersive] = useState(false);
   const trimmed = useDomeTrim();
+  const tvShown = useTvSatellites();
   const [unsupported, setUnsupported] = useState(false);
   // The picker opens to its form when there is no location, and folds away once one
   // exists — which can happen after the first render, when the dish's GPS arrives.
@@ -176,6 +182,31 @@ export function SatelliteView({
     scene?.setTrimUnmapped(trimmed);
   }, [scene, trimmed]);
 
+  // The geostationary arc and its TV slots, for wherever the site is. Keyed on
+  // the coordinates rather than the location object, which is rebuilt whenever
+  // the dish's GPS refreshes, so the arc is not regenerated for an identical spot.
+  const siteLatitude = observerLocation?.latitudeDeg;
+  const siteLongitude = observerLocation?.longitudeDeg;
+  const siteAltitude = observerLocation?.altitudeM;
+  const geoOverlay = useMemo(
+    () =>
+      tvShown &&
+      siteLatitude !== undefined &&
+      siteLongitude !== undefined &&
+      siteAltitude !== undefined
+        ? buildGeoOverlay({
+            latitudeDeg: siteLatitude,
+            longitudeDeg: siteLongitude,
+            altitudeM: siteAltitude,
+          })
+        : null,
+    [tvShown, siteLatitude, siteLongitude, siteAltitude],
+  );
+  useEffect(() => {
+    scene?.setGeoOverlay(geoOverlay);
+    return () => scene?.setGeoOverlay(null);
+  }, [scene, geoOverlay]);
+
   // The constellation is the dish's live sky. It goes quiet while scrubbing
   // history (no live map then) and while the dish is offline — a sky full of
   // moving satellites with no live link reads as invented data, not telemetry.
@@ -251,9 +282,26 @@ export function SatelliteView({
         },
       });
     }
+    // The TV-satellite slots ride the same mechanism: one tag per slot, written
+    // straight onto its node every frame.
+    for (const anchor of geoOverlay?.anchors ?? []) {
+      trackers.push({
+        name: `geo:${anchor.id}`,
+        report: (at: ScreenPoint | null) => {
+          const node = geoLabelRefs.current.get(anchor.id);
+          if (!node) return;
+          if (!at || at.behind) {
+            node.style.opacity = "0";
+            return;
+          }
+          node.style.opacity = "1";
+          node.style.transform = `translate(${at.x}px, ${at.y}px)`;
+        },
+      });
+    }
     scene.setTrackers(trackers);
     return () => scene.setTrackers([]);
-  }, [scene, servingName, selectedName, viewingHistory]);
+  }, [scene, servingName, selectedName, viewingHistory, geoOverlay]);
 
   useEffect(() => {
     if (!scene) return;
@@ -376,6 +424,14 @@ export function SatelliteView({
         {/* Plain advice under the card, not a boxed callout — sits like the
             "Drag to orbit" hint below. Live view only: a scrubbed snapshot is a
             past sky, so its live obstruction reading does not describe it. */}
+        {tvShown && (
+          <p className='m-0 text-xs leading-relaxed text-[#8b97a8]'>
+            {hasLocation
+              ? "The green arc is the geostationary belt, where TV satellites sit fixed in the sky. The marks are common TV slots, labelled by orbital longitude."
+              : "Set your site above to see where the TV satellites sit from here."}
+          </p>
+        )}
+
         {!viewingHistory && hasSurvey && (
           <p className='m-0 text-xs leading-relaxed text-[#8b97a8]'>
             {(obstructionStats?.fractionObstructed ?? 0) < 0.005
@@ -399,6 +455,26 @@ export function SatelliteView({
           {servingName?.replace(/\s*\[DTC\]\s*/, "")}
         </span>
       </div>
+
+      {/* TV-satellite slot tags, one per slot above the horizon. Each starts hidden
+          and is positioned imperatively by its tracker, like the serving tag. */}
+      {geoOverlay?.anchors.map((anchor) => (
+        <span
+          key={anchor.id}
+          aria-hidden
+          data-slot='tv-satellite-label'
+          ref={(node) => {
+            if (node) geoLabelRefs.current.set(anchor.id, node);
+            else geoLabelRefs.current.delete(anchor.id);
+          }}
+          className='pointer-events-none absolute left-0 top-0 whitespace-nowrap font-mono text-[10.5px] tracking-wide'
+          style={{ opacity: 0, willChange: "transform", color: "#8ff5c8" }}
+        >
+          <span className='absolute pl-2' style={{ marginTop: -14 }}>
+            {anchor.label}
+          </span>
+        </span>
+      ))}
 
       {/* Selection marker: only while details are open, and in ink rather than
           amber — amber is the legend's word for "serving", and this ring can
@@ -432,6 +508,13 @@ export function SatelliteView({
           onClick={() => setImmersive((on) => !on)}
         >
           <ImmersiveIcon size={14} />
+        </SkyControl>
+        <SkyControl
+          label={tvShown ? "Hide TV satellites" : "Show TV satellites"}
+          pressed={tvShown}
+          onClick={() => setTvSatellitesEnabled(!tvShown)}
+        >
+          <SatelliteDish size={14} />
         </SkyControl>
         <SkyControl
           label={domeShown ? "Hide dome" : "Show dome"}
