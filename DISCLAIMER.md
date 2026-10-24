@@ -31,4 +31,4 @@ software, including any disruption to your Starlink service.
 
 ## Contact
 
-hello@dishylink.com
+Use the [contact form](https://qualtricsxmm8q5gxrhq.qualtrics.com/jfe/form/SV_1TvkCrIKgaEYHPM).

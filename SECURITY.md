@@ -4,9 +4,10 @@
 
 Please report security issues privately rather than opening a public issue. Use
 the **Report a vulnerability** button on this repository's
-[Security tab](https://github.com/DaveyHert/Dishylink/security/advisories/new),
+[Security tab](https://github.com/rike4545/Cathode/security/advisories/new),
 which opens a private thread visible only to you and the maintainer. If you
-would rather use email, **hello@dishylink.com** reaches the same place.
+cannot use that, the [contact form](https://qualtricsxmm8q5gxrhq.qualtrics.com/jfe/form/SV_1TvkCrIKgaEYHPM)
+reaches the same place; please do not put exploit details in a public issue.
 
 Include what you found, how to reproduce it, which platform you were on, and the
 version of Dishylink you were running.

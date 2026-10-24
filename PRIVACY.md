@@ -56,4 +56,4 @@ explicit opt-in.
 
 ## Contact
 
-Questions about this policy: hello@dishylink.com
+Questions about this policy: use the [contact form](https://qualtricsxmm8q5gxrhq.qualtrics.com/jfe/form/SV_1TvkCrIKgaEYHPM).

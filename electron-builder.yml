@@ -5,7 +5,7 @@
 # electron-builder to skip signing rather than hunt for a certificate and fail.
 appId: com.dishylink.app
 productName: Dishylink
-copyright: © 2026 daveyhert
+copyright: © 2026 daveyhert, rike4545
 
 # Ad-hoc sign the built .app so macOS will post notifications (an unsigned build
 # fails the notification call outright). Free, no Apple account — see the hook.
@@ -25,8 +25,8 @@ directories:
 # an installed app has no credential to authenticate a private-repo download.
 publish:
   provider: github
-  owner: DaveyHert
-  repo: dishylink
+  owner: rike4545
+  repo: Cathode
   releaseType: draft
 
 # Only the built app ships. The build/*.png icons are named explicitly because
