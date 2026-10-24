@@ -1,15 +1,17 @@
 # <img src="docs/logo.svg" alt="" width="34" height="34" align="top"> Dishylink
 
-[![Downloads](https://img.shields.io/github/downloads/DaveyHert/dishylink/total.svg)](https://github.com/DaveyHert/dishylink/releases)
-[![macOS](https://img.shields.io/badge/macOS-12.0+-black.svg)](https://github.com/DaveyHert/dishylink/releases/latest)
-[![Windows](https://img.shields.io/badge/Windows-10+-0078D4.svg)](https://github.com/DaveyHert/dishylink/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-12.0+-black.svg)](https://github.com/rike4545/Cathode/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10+-0078D4.svg)](https://github.com/rike4545/Cathode/releases/latest)
 [![Browsers](https://img.shields.io/badge/Chrome%20%7C%20Edge%20%7C%20Firefox-extension-FF6F00.svg)](#browser-extension-chrome-edge-firefox)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![X](https://img.shields.io/badge/X-%23000000.svg?style=flat&logo=X&logoColor=white)](https://x.com/daveyhert)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%23FFDD00.svg?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/daveyhert)
 
 An open-source Starlink desktop app for macOS, Windows and browsers to monitor
-the performance and health of your Starlink.
+the performance and health of your Starlink, with a satellite finder for aiming a
+TV dish.
+
+Cathode is a fork of [Dishylink](https://github.com/DaveyHert/dishylink) by
+daveyhert, used under the MIT licence, and carries its work forward. See the
+[changelog](CHANGELOG.md) for what Cathode has added.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="landing/src/assets/shots/dashboard-dark.png">
@@ -26,18 +28,20 @@ only to Starlink.
 
 ## <img src="docs/platforms/download.svg" alt="" width="22" height="22" align="top"> Download
 
-| Platform                                                                                     | Format    | Architecture           |                                                                                                                                                          |
-| :------------------------------------------------------------------------------------------- | :-------- | :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| <img src="docs/platforms/apple.svg" alt="" width="16" align="top"> **macOS** 12+             | `DMG`     | `arm64`: Apple silicon |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
-| <img src="docs/platforms/apple.svg" alt="" width="16" align="top"> **macOS** 12+             | `DMG`     | `x64`: Intel           |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
-| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | Universal              |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
-| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `x64`                  |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
-| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `arm64`                |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
-| <img src="landing/public/browsers/chrome.svg" alt="" width="16" align="top"> **Chrome** 144+ | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
-| <img src="landing/public/browsers/edge.svg" alt="" width="16" align="top"> **Edge**          | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
-| <img src="landing/public/browsers/firefox.svg" alt="" width="16" align="top"> **Firefox**    | Extension | Any                    |                     [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://addons.mozilla.org/addon/dishylink/)                     |
+| Platform                                                                             | Format | Architecture           |                                                                             |
+| :----------------------------------------------------------------------------------- | :----- | :--------------------- | :-------------------------------------------------------------------------: |
+| <img src="docs/platforms/apple.svg" alt="" width="16" align="top"> **macOS** 12+     | `DMG`  | `arm64`: Apple silicon | [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest] |
+| <img src="docs/platforms/apple.svg" alt="" width="16" align="top"> **macOS** 12+     | `DMG`  | `x64`: Intel           | [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest] |
+| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+ | `EXE`  | Universal              | [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest] |
+| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+ | `EXE`  | `x64`                  | [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest] |
+| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+ | `EXE`  | `arm64`                | [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest] |
 
-[latest]: https://github.com/DaveyHert/dishylink/releases/latest
+[latest]: https://github.com/rike4545/Cathode/releases/latest
+
+Cathode has not published a release yet, so the links above will not resolve
+until the first one. Until then, build it from source: see
+[CONTRIBUTING.md](CONTRIBUTING.md). The browser extensions are not in any store
+yet and are built from source too.
 
 Not sure which to pick? On Windows, take Universal. On macOS, take `arm64` for
 Apple silicon (M1 and later) or `x64` for Intel.
@@ -157,7 +161,38 @@ npm run pack:win        # Windows build
 npm run build:extension # Chromium extension bundle
 npm run build:extension:firefox
 npm run build:extension:edge
+docker compose up --build   # browser dashboard + recorder, this machine only
 ```
+
+### Docker (browser)
+
+Packages the web dashboard and the history recorder in one container. The
+image is built **only for the CPU of the machine you clone and build on** —
+amd64 on an x86 box, arm64 on Apple Silicon or a 64-bit Raspberry Pi. Compose
+does not cross-build. Open `http://localhost:8080`. The **host running Docker
+must be on the Starlink LAN** — the dish (`192.168.100.1`) and router
+(`192.168.1.1`) are reached through the host, not from inside Compose. Docker
+Desktop has no real `--network host`; do not set it.
+
+```bash
+docker compose up --build
+```
+
+A Raspberry Pi 4/5 needs the 64-bit OS and enough RAM for the Vite build
+(4 GB is comfortable; 2 GB often OOMs).
+
+Recordings, and a pasted starlink.com session, persist in the `historian-data`
+volume — a session survives a restart with no extra mount needed. If
+`com.dishylink.historian` is already running under launchd, stop it first —
+two recorders double the router's 200 ms client poll.
+
+Optional, in `compose.yaml`:
+
+- `HOST_LAN_IP` / `HOST_MAC` — the host's LAN address, so "This device" and
+  pause-self-protect still work through Docker Desktop's port publish.
+
+Cloud session writes stay localhost-only. Opening the dashboard via the host's
+LAN IP from a phone still shows live data and history.
 
 Useful while working on it:
 
@@ -185,9 +220,8 @@ A fresh desktop build opens with no history by design: it fills up as it runs.
 
 ### Browser extension (Chrome, Edge, Firefox)
 
-Install it from the
-[Chrome Web Store](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna)
-or [Firefox Add-ons](https://addons.mozilla.org/addon/dishylink/).
+Cathode is not in any browser store yet, so build it and load it unpacked, as
+described under Dev workflow below.
 
 - The toolbar icon opens the dashboard as a chromeless window (default) or an
   ordinary tab — never a cramped toolbar popup.

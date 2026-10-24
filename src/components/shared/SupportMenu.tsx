@@ -3,14 +3,10 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { HeartIcon } from "../../assets/icons/HeartIcon";
 import { StarIcon } from "../../assets/icons/StarIcon";
-import { CoffeeIcon } from "../../assets/icons/CoffeeIcon";
-import { PatreonIcon } from "../../assets/icons/PatreonIcon";
 import { DownloadIcon } from "../../assets/icons/DownloadIcon";
 import { BugIcon } from "../../assets/icons/BugIcon";
 import { BulbIcon } from "../../assets/icons/BulbIcon";
 import { MailIcon } from "../../assets/icons/MailIcon";
-import { XIcon } from "../../assets/icons/XIcon";
-import { LinkedinIcon } from "../../assets/icons/LinkedinIcon";
 import { ShieldIcon } from "../../assets/icons/ShieldIcon";
 import { ScaleIcon } from "../../assets/icons/ScaleIcon";
 import { SUPPORT_LINKS } from "./supportLinks";
@@ -72,24 +68,6 @@ const SECTIONS: { label: string; items: MenuLinkItem[] }[] = [
         iconClassName: "text-(--accent)",
         children: "Star project on GitHub",
       },
-      {
-        href: SUPPORT_LINKS.githubSponsors,
-        icon: HeartIcon,
-        iconClassName: "text-[#ea4aaa]",
-        children: "Become a GitHub Sponsor",
-      },
-      {
-        href: SUPPORT_LINKS.patreon,
-        icon: PatreonIcon,
-        iconClassName: "text-ink",
-        children: "Become a Patreon",
-      },
-      {
-        href: SUPPORT_LINKS.buyMeACoffee,
-        icon: CoffeeIcon,
-        iconClassName: "text-ink",
-        children: "Buy Me a Coffee",
-      },
     ],
   },
   {
@@ -101,11 +79,7 @@ const SECTIONS: { label: string; items: MenuLinkItem[] }[] = [
   },
   {
     label: "Contact",
-    items: [
-      { href: SUPPORT_LINKS.contact, icon: MailIcon, children: "Contact me" },
-      { href: SUPPORT_LINKS.x, icon: XIcon, children: "@daveyhert" },
-      { href: SUPPORT_LINKS.linkedin, icon: LinkedinIcon, children: "LinkedIn" },
-    ],
+    items: [{ href: SUPPORT_LINKS.contact, icon: MailIcon, children: "Contact us" }],
   },
   {
     label: "Legal",

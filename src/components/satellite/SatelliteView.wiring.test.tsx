@@ -22,6 +22,7 @@ import { render } from "vitest-browser-react";
 import type { DishObstructionMapJson, DishStatusJson } from "@core/dishClient";
 import type { SatelliteFeed } from "../../hooks/useSatellites";
 import type { SatelliteSky } from "../../lib/satellites";
+import { setTvSatellitesEnabled } from "../../lib/tvSatellites";
 import { TooltipProvider } from "../ui/tooltip";
 
 const calls: string[] = [];
@@ -46,6 +47,8 @@ vi.mock("./skyScene", () => ({
         calls.push("setTrackers");
         scene.trackers = next;
       },
+      setGeoOverlay: (overlay: unknown) =>
+        calls.push(overlay ? "setGeoOverlay(overlay)" : "setGeoOverlay(null)"),
       getSatellite: () => null,
       setOnPick: (pick: typeof scene.pick) => {
         calls.push(pick ? "setOnPick(fn)" : "setOnPick(null)");
@@ -206,4 +209,62 @@ test("the selection ring marks the satellite you tapped, not the serving one", a
     "the ring sits on the tapped satellite, not the serving one at 50,60",
   ).toBe("translate(300px, 200px)");
   expect(ring!.style.display).toBe("block");
+});
+
+// The geostationary arc is an overlay on the same scene: the view builds it for
+// the site and hands it over, and each slot's tag rides its own tracker.
+function renderForSite() {
+  return render(
+    <TooltipProvider>
+      <SatelliteView
+        obstructionMap={MAP}
+        status={STATUS}
+        satellites={activeFeed}
+        observerLocation={{ latitudeDeg: 51.5, longitudeDeg: -0.12, altitudeM: 0 }}
+        onLocationSaved={() => {}}
+        onClearLocation={() => {}}
+        onClose={() => {}}
+      />
+    </TooltipProvider>,
+  );
+}
+
+test("with TV satellites switched on, the scene gets an arc and each slot tag follows its tracker", async () => {
+  calls.length = 0;
+  scene.trackers = [];
+  setTvSatellitesEnabled(true);
+  try {
+    renderForSite();
+    await settle();
+
+    expect(calls, `calls seen: ${calls.join(", ")}`).toContain("setGeoOverlay(overlay)");
+    const tracker = scene.trackers.find((candidate) => candidate.name.startsWith("geo:"));
+    expect(tracker, "a slot is tracked").toBeTruthy();
+
+    const labels = () =>
+      Array.from(document.querySelectorAll<HTMLElement>("[data-slot='tv-satellite-label']"));
+    expect(labels().length, "one tag per slot above the horizon").toBeGreaterThan(5);
+
+    tracker!.report({ x: 120, y: 80, behind: false });
+    expect(labels().some((label) => label.style.transform === "translate(120px, 80px)")).toBe(true);
+    expect(labels().some((label) => label.style.opacity === "1")).toBe(true);
+
+    tracker!.report(null);
+    expect(labels().filter((label) => label.style.opacity === "1")).toHaveLength(0);
+  } finally {
+    setTvSatellitesEnabled(false);
+  }
+});
+
+test("with TV satellites off, which is the default, the scene gets no arc and no tags", async () => {
+  calls.length = 0;
+  scene.trackers = [];
+  setTvSatellitesEnabled(false);
+  renderForSite();
+  await settle();
+
+  expect(calls).toContain("setGeoOverlay(null)");
+  expect(calls).not.toContain("setGeoOverlay(overlay)");
+  expect(scene.trackers.some((tracker) => tracker.name.startsWith("geo:"))).toBe(false);
+  expect(document.querySelector("[data-slot='tv-satellite-label']")).toBeNull();
 });

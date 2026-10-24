@@ -11,18 +11,19 @@ import { SUPPORT_LINKS } from "./supportLinks";
 describe("support menu links", () => {
   it("point where they are meant to", () => {
     expect(SUPPORT_LINKS).toEqual({
-      starRepo: "https://github.com/DaveyHert/dishylink",
-      githubSponsors: "https://github.com/sponsors/daveyhert",
-      buyMeACoffee: "https://buymeacoffee.com/daveyhert",
-      patreon: "https://www.patreon.com/DaveyHert",
-      latestRelease: "https://github.com/DaveyHert/dishylink/releases/latest",
-      reportIssue: "https://github.com/DaveyHert/dishylink/issues/new?labels=bug",
-      requestFeature: "https://github.com/DaveyHert/dishylink/issues/new?labels=enhancement",
-      contact: "mailto:hello@dishylink.com",
-      x: "https://x.com/daveyhert",
-      linkedin: "http://linkedin.com/in/daveyhert/",
-      privacyPolicy: "https://github.com/DaveyHert/dishylink/blob/master/PRIVACY.md",
-      disclaimer: "https://github.com/DaveyHert/dishylink/blob/master/DISCLAIMER.md",
+      starRepo: "https://github.com/rike4545/Cathode",
+      latestRelease: "https://github.com/rike4545/Cathode/releases/latest",
+      reportIssue: "https://github.com/rike4545/Cathode/issues/new?labels=bug",
+      requestFeature: "https://github.com/rike4545/Cathode/issues/new?labels=enhancement",
+      contact: "https://qualtricsxmm8q5gxrhq.qualtrics.com/jfe/form/SV_1TvkCrIKgaEYHPM",
+      privacyPolicy: "https://github.com/rike4545/Cathode/blob/master/PRIVACY.md",
+      disclaimer: "https://github.com/rike4545/Cathode/blob/master/DISCLAIMER.md",
     });
+  });
+
+  it("publish no email address", () => {
+    for (const link of Object.values(SUPPORT_LINKS)) {
+      expect(link.startsWith("mailto:")).toBe(false);
+    }
   });
 });

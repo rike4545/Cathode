@@ -9,6 +9,7 @@
 import { advanceLookAngles, type SatelliteSky } from "../../lib/satellites";
 
 import { meshForModel } from "./dishModels";
+import type { GeoOverlay } from "./geoBelt";
 import { lookAt, multiply, perspective } from "./skyMath";
 import {
   LIGHT,
@@ -53,6 +54,11 @@ export interface SkyScene {
    * screen position every frame, so labels track without a React render per frame.
    */
   setTrackers(trackers: SkyTracker[]): void;
+  /**
+   * The geostationary arc and its TV-satellite slots, or null to remove them.
+   * Each slot can be tracked like a satellite, under the name "geo:" + its id.
+   */
+  setGeoOverlay(overlay: GeoOverlay | null): void;
   /** This frame's data for a satellite, so an open card can stay live. */
   getSatellite(name: string): SatelliteSky | null;
   /** Called with the satellite under a click, or null when the sky was empty. */
@@ -235,6 +241,10 @@ export function createSkyScene(
   /** Last frame's view-projection, reused by picking so a click matches what is drawn. */
   let lastMvp = new Float32Array(16);
   let trackers: SkyTracker[] = [];
+  /** The geostationary arc's line list, and where each trackable slot sits. */
+  let geoBuffer: WebGLBuffer | null = null;
+  let geoVertexCount = 0;
+  let geoAnchors = new Map<string, [number, number, number]>();
   let onPick: ((sky: SatelliteSky | null) => void) | null = null;
   const beamVerts = new Float32Array(6 * 5); // two triangles, xyz + across + along
   const beamBuffer = buffer(beamVerts, gl.DYNAMIC_DRAW);
@@ -716,6 +726,7 @@ export function createSkyScene(
     bindMesh(dishBuffer, dishData.length / 6);
     bindMesh(compassBuffer, compassData.length / 6);
     bindMesh(labelBuffer, labelData.length / 6);
+    if (geoBuffer && geoVertexCount > 0) bindMesh(geoBuffer, geoVertexCount, gl.LINES);
 
     // Wakes under the craft and the beam, so a satellite and its serving beam
     // both sit crisply on top of the haze rather than behind it.
@@ -727,6 +738,11 @@ export function createSkyScene(
     // callback keeps it out of React state, which cannot run at frame rate.
     lastMvp = mvp;
     for (const tracker of trackers) {
+      const anchor = geoAnchors.get(tracker.name);
+      if (anchor) {
+        tracker.report(toScreen(mvp, anchor));
+        continue;
+      }
       const index = frameSky.findIndex((s) => s.name === tracker.name);
       tracker.report(index < 0 ? null : toScreen(mvp, framePositions[index]));
     }
@@ -793,6 +809,18 @@ export function createSkyScene(
         if (!next.some((tracker) => tracker.name === previous.name)) previous.report(null);
       }
       trackers = next;
+    },
+    setGeoOverlay(overlay) {
+      if (geoBuffer) gl.deleteBuffer(geoBuffer);
+      geoBuffer = null;
+      geoVertexCount = 0;
+      geoAnchors = new Map();
+      if (!overlay) return;
+      if (overlay.lines.length > 0) {
+        geoBuffer = buffer(overlay.lines);
+        geoVertexCount = overlay.lines.length / 6;
+      }
+      for (const anchor of overlay.anchors) geoAnchors.set(`geo:${anchor.id}`, anchor.position);
     },
     getSatellite(name) {
       return frameSky.find((s) => s.name === name) ?? null;
